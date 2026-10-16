@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KSP Tracking Station</title>
+<style>
+:root {
+  --bg: #070b10; --panel: #0d141c; --panel2: #111b26; --line: #1e2c3a; --line2: #2a3d50;
+  --text: #cfe3f2; --dim: #7f97ab; --faint: #4c6378;
+  --accent: #46c3ff; --good: #5fd38d; --warn: #ffb547; --bad: #ff5f5f; --mag: #c38bff;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+.app { display: grid; height: 100vh; grid-template-columns: 290px 1fr 400px;
+  grid-template-rows: 52px 1fr 36vh; grid-template-areas: "top top top" "list map side" "list tabs tabs"; gap: 1px; background: var(--line); }
+.top { grid-area: top; background: var(--panel); display: flex; align-items: center; gap: 18px; padding: 0 14px; overflow: hidden; }
+.list { grid-area: list; background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.mapwrap { grid-area: map; background: #04070a; position: relative; min-height: 0; }
+.side { grid-area: side; background: var(--panel); overflow-y: auto; min-height: 0; }
+.tabs { grid-area: tabs; background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+
+/* top bar */
+.brand { font-weight: 700; letter-spacing: .12em; font-size: 12px; color: var(--accent); white-space: nowrap; }
+.brand small { display: block; color: var(--dim); letter-spacing: .02em; font-weight: 500; font-size: 11px; }
+.clock { font-family: var(--mono); font-size: 18px; color: #fff; white-space: nowrap; }
+.clock small { display: block; font-size: 10px; color: var(--dim); font-family: inherit; }
+.stat { white-space: nowrap; }
+.stat b { font-family: var(--mono); font-size: 15px; display: block; }
+.stat span { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
+.funds b { color: var(--good); } .sci b { color: var(--accent); } .rep b { color: var(--mag); }
+.facs { display: flex; gap: 4px; flex-wrap: wrap; max-width: 520px; }
+.chip { font-size: 10px; padding: 1px 6px; border: 1px solid var(--line2); border-radius: 10px; color: var(--dim); white-space: nowrap; }
+.chip.l3 { color: var(--good); border-color: #2c5c40; } .chip.l2 { color: var(--warn); border-color: #5c4a2c; }
+.age { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--dim); white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); }
+.dot.stale { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.dot.dead { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+
+/* list */
+.listhead { padding: 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.listhead input { width: 100%; background: var(--panel2); border: 1px solid var(--line2); color: var(--text); padding: 5px 8px; border-radius: 4px; font: inherit; }
+.filters { display: flex; flex-wrap: wrap; gap: 4px; }
+.filters button { font: inherit; font-size: 10px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line2); background: transparent; color: var(--faint); cursor: pointer; }
+.filters button.on { color: var(--text); border-color: var(--accent); }
+.vlist { overflow-y: auto; flex: 1; padding-bottom: 20px; }
+.bodyhdr { padding: 6px 10px 3px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); cursor: pointer; display: flex; align-items: center; gap: 6px; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.bodyhdr:hover { color: var(--text); }
+.bodyhdr.moon { padding-left: 22px; }
+.bodyhdr i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.vrow { padding: 4px 10px 4px 14px; display: flex; align-items: center; gap: 7px; cursor: pointer; border-left: 2px solid transparent; }
+.vrow.moon { padding-left: 28px; }
+.vrow:hover { background: var(--panel2); }
+.vrow.sel { background: #12324a; border-left-color: var(--accent); }
+.vrow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vrow .sit { font-size: 10px; color: var(--faint); }
+.ico { width: 10px; height: 10px; flex: none; transform: rotate(45deg); border-radius: 2px; }
+.badge { font-size: 9px; padding: 0 4px; border-radius: 3px; background: var(--panel2); color: var(--dim); border: 1px solid var(--line2); }
+.badge.mnv { color: var(--warn); border-color: #5c4a2c; }
+.badge.crew { color: var(--good); border-color: #2c5c40; }
+.badge.lab { color: var(--accent); border-color: #1e4a63; }
+
+/* map */
+canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+canvas.drag { cursor: grabbing; }
+.mapbar { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.mapbar select, .mapbar button { font: inherit; font-size: 11px; background: rgba(13,20,28,.9); color: var(--text); border: 1px solid var(--line2); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+.mapbar button:hover { border-color: var(--accent); }
+.mapinfo { position: absolute; bottom: 8px; left: 8px; font-size: 11px; color: var(--dim); font-family: var(--mono); background: rgba(4,7,10,.7); padding: 2px 6px; border-radius: 3px; }
+.legend { position: absolute; bottom: 8px; right: 8px; font-size: 10px; color: var(--dim); background: rgba(4,7,10,.7); padding: 4px 8px; border-radius: 3px; display: flex; gap: 10px; }
+.legend span::before { content: ""; display: inline-block; width: 14px; border-top: 2px solid; margin-right: 4px; vertical-align: middle; }
+.legend .cur::before { border-color: var(--accent); }
+.legend .plan::before { border-color: var(--warn); border-top-style: dashed; }
+.tip { position: absolute; pointer-events: none; background: rgba(13,20,28,.95); border: 1px solid var(--line2); padding: 3px 7px; border-radius: 3px; font-size: 11px; display: none; white-space: nowrap; }
+
+/* side */
+.sec { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.sec h3 { margin: 0 0 6px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.vtitle { font-size: 18px; font-weight: 700; color: #fff; word-break: break-word; }
+.vsub { color: var(--dim); font-size: 12px; margin-top: 2px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+.kv dt { color: var(--dim); } .kv dd { margin: 0; font-family: var(--mono); text-align: right; }
+.bar { display: grid; grid-template-columns: 44px 1fr 110px; align-items: center; gap: 8px; margin: 3px 0; font-size: 11px; }
+.bar .t { height: 7px; background: var(--panel2); border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.bar .f { height: 100%; border-radius: 4px; }
+.bar .n { font-family: var(--mono); text-align: right; color: var(--dim); }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { font-size: 11px; padding: 1px 7px; border-radius: 3px; background: var(--panel2); border: 1px solid var(--line2); }
+.tag.relay { border-color: #1e4a63; color: var(--accent); }
+.card { background: var(--panel2); border: 1px solid var(--line2); border-left: 3px solid var(--warn); border-radius: 4px; padding: 8px 10px; margin-top: 6px; }
+.card.missed { border-left-color: var(--bad); }
+.card .h { display: flex; justify-content: space-between; font-weight: 600; }
+.card .t { font-family: var(--mono); color: var(--warn); }
+.card.missed .t { color: var(--bad); }
+.card .dv { font-family: var(--mono); font-size: 12px; margin: 4px 0; }
+.card .after { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.box { background: var(--panel2); border: 1px solid var(--line2); border-radius: 4px; padding: 8px 10px; }
+.good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); } .dim { color: var(--dim); }
+.mono { font-family: var(--mono); }
+.empty { color: var(--faint); padding: 20px 14px; }
+
+/* tabs */
+.tabbar { display: flex; border-bottom: 1px solid var(--line); }
+.tabbar button { font: inherit; background: none; border: none; color: var(--dim); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.tabbar button.on { color: var(--text); border-bottom-color: var(--accent); }
+.tabbar button .cnt { font-size: 10px; margin-left: 4px; padding: 0 5px; border-radius: 8px; background: var(--panel2); }
+.tabbar button .cnt.hot { background: #5c2a2a; color: #ffbaba; }
+.tabbody { overflow: auto; flex: 1; padding: 0 0 10px; }
+table { border-collapse: collapse; width: 100%; }
+th { text-align: left; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); font-weight: 600; padding: 6px 10px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+td { padding: 4px 10px; border-bottom: 1px solid #142130; vertical-align: top; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel2); }
+.num { font-family: var(--mono); text-align: right; }
+.pips { display: inline-flex; gap: 2px; }
+.pips i { width: 8px; height: 8px; border-radius: 1px; background: var(--line2); }
+.pips i.on { background: var(--warn); }
+.xpbar { width: 80px; height: 5px; background: var(--line); border-radius: 3px; display: inline-block; vertical-align: middle; overflow: hidden; }
+.xpbar i { display: block; height: 100%; background: var(--accent); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; padding: 10px; }
+.contract h4 { margin: 0 0 4px; font-size: 13px; }
+.contract ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; }
+.contract li::before { content: "☐ "; color: var(--faint); }
+.contract li.done::before { content: "☑ "; color: var(--good); }
+.alert { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #142130; align-items: center; cursor: pointer; }
+.alert:hover { background: var(--panel2); }
+.sevbad { color: var(--bad); } .sevwarn { color: var(--warn); } .sevinfo { color: var(--accent); }
+.nodata { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--bg); z-index: 10; text-align: center; color: var(--dim); }
+.nodata code { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="nodata" id="nodata"><div><h2>No data yet</h2><p>Run <code>python3 tools/ksp_digest.py --serve</code> from the repo root<br>and open <code>http://localhost:8765/web/dashboard.html</code>. The page reloads <code>data/digest.js</code> every 5 s.</p></div></div>
+<div class="app">
+  <header class="top" id="top"></header>
+  <aside class="list">
+    <div class="listhead">
+      <input id="search" placeholder="Search vessels…" autocomplete="off">
+      <div class="filters" id="filters"></div>
+    </div>
+    <div class="vlist" id="vlist"></div>
+  </aside>
+  <main class="mapwrap" id="mapwrap">
+    <canvas id="map"></canvas>
+    <div class="mapbar">
+      <select id="focus"></select>
+      <button id="btnFit" title="Fit everything in view">Fit</button>
+      <button id="btnSel" title="Zoom to selected vessel">Zoom to selected</button>
+      <button id="btnUp" title="Go to parent body">▲ Parent</button>
+    </div>
+    <div class="mapinfo" id="mapinfo"></div>
+    <div class="legend"><span class="cur">current orbit</span><span class="plan">after planned maneuvers</span></div>
+    <div class="tip" id="tip"></div>
+  </main>
+  <section class="side" id="side"></section>
+  <section class="tabs">
+    <div class="tabbar" id="tabbar"></div>
+    <div class="tabbody" id="tabbody"></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+// ------------------------------------------------------------ constants
+const DAY = 21600, YEAR = 426 * DAY, G0 = 9.80665, DSN = 250e9;
+const BODY_ORDER = [0, 4, 5, 13, 1, 2, 3, 6, 7, 15, 8, 9, 10, 12, 11, 14, 16];
+const MINOR = new Set(["Debris", "Flag", "SpaceObject", "DeployedScienceController", "DeployedSciencePart", "DroppedPart", "Unknown"]);
+const TYPE_COLOR = { Station: "#ffb84d", Relay: "#46c3ff", Probe: "#9ccc65", Rover: "#ffd54f", Lander: "#ff8a65",
+  Ship: "#c38bff", Base: "#f06292", Plane: "#80cbc4", EVA: "#ffffff", Debris: "#5a6672", SpaceObject: "#8d6e63",
+  Flag: "#90a4ae", DeployedScienceController: "#78909c", DeployedSciencePart: "#78909c" };
+const FILTER_TYPES = ["Station", "Relay", "Probe", "Rover", "Lander", "Ship", "Base", "Plane", "Minor"];
+const ANT = { "Communotron 16": [5e5, 0], "Communotron 16-S": [5e5, 0], "HG-5": [5e6, 1], "DTS-M1": [2e9, 0],
+  "RA-2": [2e9, 1], "HG-55": [15e9, 0], "RA-15": [15e9, 1], "Communotron 88-88": [100e9, 0], "RA-100": [100e9, 1] };
+const RES = [["LiquidFuel", "LF", "#ffb547"], ["Oxidizer", "Ox", "#46c3ff"], ["MonoPropellant", "Mono", "#e0e0e0"],
+  ["XenonGas", "Xe", "#c38bff"], ["Ore", "Ore", "#a1887f"], ["ElectricCharge", "EC", "#5fd38d"]];
+const XP_LEVELS = [0, 2, 8, 16, 32, 64];
+
+// ------------------------------------------------------------ state
+let D = null, lastGen = null;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ksp-ts:" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("ksp-ts:" + k, JSON.stringify(v)); } catch {} },
+};
+const S = {
+  sel: store.get("sel", null), focus: store.get("focus", null), tab: store.get("tab", "alerts"),
+  filters: new Set(store.get("filters", FILTER_TYPES.filter(t => t !== "Minor"))), q: "",
+  view: null, // {cx, cy, scale}
+};
+
+// ------------------------------------------------------------ helpers
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fin = x => typeof x === "number" && isFinite(x);
+function dist(m) {
+  if (!fin(m)) return "∞";
+  const a = Math.abs(m);
+  if (a >= 1e9) return (m / 1e9).toLocaleString(undefined, { maximumFractionDigits: 3 }) + " Gm";
+  if (a >= 1e6) return (m / 1e6).toLocaleString(undefined, { maximumFractionDigits: 1 }) + " Mm";
+  return (m / 1e3).toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km";
+}
+function dur(t, short) {
+  if (!fin(t)) return "—";
+  const neg = t < 0; t = Math.abs(t);
+  const y = Math.floor(t / YEAR); t -= y * YEAR;
+  const d = Math.floor(t / DAY); t -= d * DAY;
+  const h = Math.floor(t / 3600); t -= h * 3600;
+  const m = Math.floor(t / 60); const s = t - m * 60;
+  const p = [];
+  if (y) p.push(y + "y");
+  if (y || d) p.push(d + "d");
+  if (short && (y || d)) p.push(h + "h");
+  else p.push(`${h}h ${String(m).padStart(2, "0")}m ${String(s.toFixed(0)).padStart(2, "0")}s`);
+  return (neg ? "-" : "") + p.join(" ");
+}
+function kdate(ut) {
+  const y = Math.floor(ut / YEAR); let r = ut - y * YEAR;
+  const d = Math.floor(r / DAY); r -= d * DAY;
+  const h = Math.floor(r / 3600); r -= h * 3600; const m = Math.floor(r / 60); const s = Math.floor(r - m * 60);
+  return `Y${y + 1} D${d + 1} ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+const num = (x, d = 0) => fin(x) ? x.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d }) : "—";
+const bodyName = i => D.planets[i]?.name ?? "?";
+const vid = v => v.pid || v.name;
+
+// ------------------------------------------------------------ orbit maths (ported from ksp_digest.py)
+function rotator(el) {
+  const r = Math.PI / 180, O = el.LAN * r, i = el.INC * r, w = el.LPE * r;
+  const cO = Math.cos(O), sO = Math.sin(O), ci = Math.cos(i), si = Math.sin(i), cw = Math.cos(w), sw = Math.sin(w);
+  const R = [[cO * cw - sO * sw * ci, -cO * sw - sO * cw * ci], [sO * cw + cO * sw * ci, -sO * sw + cO * cw * ci], [sw * si, cw * si]];
+  return (px, py) => [R[0][0] * px + R[0][1] * py, R[1][0] * px + R[1][1] * py, R[2][0] * px + R[2][1] * py];
+}
+function trueAnomalyAt(el, t, GM) {
+  const a = el.SMA, e = el.ECC;
+  if (e < 1 && a > 0) {
+    const n = Math.sqrt(GM / a ** 3); const M = el.MNA + n * (t - el.EPH);
+    let E = M; for (let k = 0; k < 50; k++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+    return 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2), Math.sqrt(1 - e) * Math.cos(E / 2));
+  }
+  const n = Math.sqrt(GM / (-a) ** 3); const M = el.MNA + n * (t - el.EPH);
+  let H = Math.asinh(M / e); for (let k = 0; k < 60; k++) H -= (e * Math.sinh(H) - H - M) / (e * Math.cosh(H) - 1);
+  return 2 * Math.atan(Math.sqrt((e + 1) / (e - 1)) * Math.tanh(H / 2));
+}
+function posAtNu(el, nu, rot) {
+  const p = el.SMA * (1 - el.ECC * el.ECC); const r = p / (1 + el.ECC * Math.cos(nu));
+  return (rot || rotator(el))(r * Math.cos(nu), r * Math.sin(nu));
+}
+function posAt(el, t, GM) { return posAtNu(el, trueAnomalyAt(el, t, GM)); }
+function orbitPath(el, maxR) {
+  const rot = rotator(el), pts = [], e = el.ECC;
+  if (e < 1 && el.SMA > 0) {
+    for (let k = 0; k <= 360; k++) pts.push(posAtNu(el, k / 360 * 2 * Math.PI, rot));
+  } else {
+    const nmax = Math.acos(-1 / e) * 0.995;
+    for (let k = -200; k <= 200; k++) {
+      const nu = k / 200 * nmax; const p = posAtNu(el, nu, rot);
+      if (Math.hypot(p[0], p[1], p[2]) <= maxR) pts.push(p);
+    }
+  }
+  return pts;
+}
+function helioPos(idx, t) { // position of body idx relative to Kerbol
+  const b = D.planets[idx]; if (!b || b.parent == null) return [0, 0, 0];
+  const par = D.planets[b.parent]; const p = posAt(b.orbit, t, par.GM); const q = helioPos(b.parent, t);
+  return [p[0] + q[0], p[1] + q[1], p[2] + q[2]];
+}
+function vesselLocal(v, t) {
+  const o = v.orbit; if (!o || !fin(o.SMA) || o.SMA === 0) return null;
+  const b = D.planets[o.ref]; if (!b) return null;
+  return posAt(o, t, b.GM);
+}
+function distToKerbin(v) {
+  const t = D.header.ut, o = v.orbit; if (!o || o.ref == null) return null;
+  const local = (v.situation === "LANDED" || v.situation === "SPLASHED" || v.situation === "PRELAUNCH") ? [0, 0, 0] : vesselLocal(v, t);
+  if (!local) return null;
+  const base = helioPos(o.ref, t), k = helioPos(1, t);
+  return Math.hypot(base[0] + local[0] - k[0], base[1] + local[1] - k[1], base[2] + local[2] - k[2]);
+}
+
+// ------------------------------------------------------------ data loading
+function load() {
+  const s = document.createElement("script");
+  s.src = "../data/digest.js?t=" + Date.now();
+  s.onload = () => { s.remove(); if (window.DIGEST && window.DIGEST.header.generated_at !== lastGen) { D = window.DIGEST; lastGen = D.header.generated_at; renderAll(); } };
+  s.onerror = () => { s.remove(); if (!D) $("nodata").style.display = "flex"; };
+  document.head.appendChild(s);
+}
+setInterval(load, 5000);
+setInterval(() => D && renderTop(), 1000);
+
+// ------------------------------------------------------------ top bar
+function renderTop() {
+  const h = D.header, c = D.career;
+  const saved = new Date(h.mtime.replace(" ", "T"));
+  const age = (Date.now() - saved) / 1000;
+  const cls = age < 120 ? "" : age < 900 ? "stale" : "dead";
+  const ageTxt = age < 60 ? Math.round(age) + " s ago" : age < 3600 ? Math.round(age / 60) + " min ago" : Math.round(age / 3600) + " h ago";
+  const facs = Object.entries(c.facilities || {}).map(([k, v]) =>
+    `<span class="chip l${v}" title="${esc(k)}">${esc(k.replace("ResearchAndDevelopment", "R&D").replace("VehicleAssemblyBuilding", "VAB").replace("SpaceplaneHangar", "SPH").replace("AstronautComplex", "Astronaut").replace("TrackingStation", "Tracking").replace("MissionControl", "Mission Ctrl"))} L${v}</span>`).join("");
+  $("top").innerHTML = `
+    <div class="brand">TRACKING STATION<small>${esc(h.title)} · KSP ${esc(h.version)}</small></div>
+    <div class="clock">${kdate(h.ut)}<small>UT ${num(h.ut)} s · as of last save</small></div>
+    <div class="stat funds"><b>√ ${num(c.funds)}</b><span>Funds</span></div>
+    <div class="stat sci"><b>${num(c.science, 1)}</b><span>Science</span></div>
+    <div class="stat rep"><b>${num(c.reputation, 1)}</b><span>Reputation</span></div>
+    <div class="facs">${facs}</div>
+    <div class="age"><span class="dot ${cls}"></span><div>save written ${ageTxt}<br><span class="dim">${esc(h.file)} · ${esc(h.mtime)}</span></div></div>`;
+}
+
+// ------------------------------------------------------------ vessel list
+function typeKey(v) { return MINOR.has(v.type) ? "Minor" : (FILTER_TYPES.includes(v.type) ? v.type : "Ship"); }
+function visible(v) {
+  if (!S.filters.has(typeKey(v))) return false;
+  return !S.q || v.name.toLowerCase().includes(S.q);
+}
+function renderFilters() {
+  $("filters").innerHTML = FILTER_TYPES.map(t => {
+    const n = D.vessels.filter(v => typeKey(v) === t).length;
+    return n ? `<button class="${S.filters.has(t) ? "on" : ""}" data-t="${t}">${t === "Minor" ? "Debris & misc" : t} ${n}</button>` : "";
+  }).join("");
+}
+function renderList() {
+  const groups = {};
+  D.vessels.filter(visible).forEach(v => (groups[v.orbit?.ref ?? -1] ||= []).push(v));
+  let html = "";
+  for (const b of BODY_ORDER) {
+    const vs = groups[b]; if (!vs) continue;
+    const p = D.planets[b], moon = p.parent != null && p.parent !== 0;
+    html += `<div class="bodyhdr ${moon ? "moon" : ""}" data-body="${b}"><i style="background:${p.color}"></i>${esc(p.name)} <span class="dim">${vs.length}</span></div>`;
+    vs.sort((a, c) => (MINOR.has(a.type) - MINOR.has(c.type)) || a.name.localeCompare(c.name));
+    for (const v of vs) {
+      const badges = [];
+      if (v.crew.length) badges.push(`<span class="badge crew">${v.crew.length}♟</span>`);
+      if (v.labs) badges.push(`<span class="badge lab">LAB</span>`);
+      if (v.maneuvers?.length) badges.push(`<span class="badge mnv">MNV</span>`);
+      html += `<div class="vrow ${moon ? "moon" : ""} ${S.sel === vid(v) ? "sel" : ""}" data-id="${esc(vid(v))}">
+        <span class="ico" style="background:${TYPE_COLOR[v.type] || "#aaa"}"></span>
+        <span class="nm" title="${esc(v.name)}">${esc(v.name)}<br><span class="sit">${esc(v.type)} · ${esc(v.situation)}</span></span>${badges.join("")}</div>`;
+    }
+  }
+  $("vlist").innerHTML = html || `<div class="empty">No vessels match.</div>`;
+}
+
+// ------------------------------------------------------------ side panel
+function selected() { return D.vessels.find(v => vid(v) === S.sel) || null; }
+function bar(label, cur, max, color) {
+  const pct = max > 0 ? Math.max(0, Math.min(100, cur / max * 100)) : 0;
+  const c = pct < 10 ? "var(--bad)" : color;
+  return `<div class="bar"><span>${label}</span><div class="t"><div class="f" style="width:${pct}%;background:${c}"></div></div><span class="n">${num(cur, cur < 100 ? 1 : 0)} / ${num(max)}</span></div>`;
+}
+function orbitKV(o) {
+  return `<dl class="kv">
+    <dt>Apoapsis</dt><dd>${dist(o.ap_alt)}</dd><dt>Periapsis</dt><dd>${dist(o.pe_alt)}</dd>
+    <dt>Inclination</dt><dd>${num(o.INC, 3)}°</dd><dt>Eccentricity</dt><dd>${num(o.ECC, 5)}</dd>
+    <dt>Period</dt><dd>${dur(o.period_s)}</dd><dt>Semi-major axis</dt><dd>${dist(o.SMA)}</dd>
+    <dt>LAN / Arg Pe</dt><dd>${num(o.LAN, 1)}° / ${num(o.LPE, 1)}°</dd></dl>`;
+}
+function kerbinBox(kr, title) {
+  if (!kr) return "";
+  const drift = kr.period_minus_kerbin_s, perYear = -drift / 9203545 * 360; // deg gained per Kerbin year
+  const dc = Math.abs(drift) < 60 ? "good" : Math.abs(drift) < 20000 ? "warn" : "bad";
+  return `<div class="box"><dl class="kv">
+    <dt>${title}</dt><dd class="${kr.phase_deg > 0 ? "good" : "warn"}">${kr.phase_deg > 0 ? "+" : ""}${num(kr.phase_deg, 2)}° ${kr.phase_deg > 0 ? "ahead" : "behind"}</dd>
+    <dt>Distance</dt><dd>${dist(kr.distance_m)}${kr.in_kerbin_soi ? ' <span class="bad">IN SOI</span>' : ""}</dd>
+    <dt>Radial offset</dt><dd>${dist(kr.radial_offset_m)}</dd>
+    <dt>Period diff</dt><dd class="${dc}">${drift > 0 ? "+" : ""}${num(drift)} s</dd>
+    <dt>Drift</dt><dd class="${dc}">${perYear > 0 ? "+" : ""}${num(perYear, 2)}° / yr (${dist(Math.abs(perYear) * Math.PI / 180 * 13599840256)}/yr)</dd></dl></div>`;
+}
+function renderSide() {
+  const v = selected();
+  if (!v) { $("side").innerHTML = `<div class="empty">Select a vessel from the list or click one on the map.</div>`; return; }
+  const o = v.orbit || {}, ut = D.header.ut;
+  const landed = ["LANDED", "SPLASHED", "PRELAUNCH"].includes(v.situation);
+  let h = `<div class="sec"><div class="vtitle">${esc(v.name)}</div>
+    <div class="vsub"><span style="color:${TYPE_COLOR[v.type] || "#aaa"}">■</span> ${esc(v.type)} · ${esc(v.situation)} · ${esc(o.body || "")} · MET ${dur(v.mission_time_s, true)}</div>
+    ${v.crew.length ? `<div style="margin-top:6px" class="tags">${v.crew.map(c => `<span class="tag">♟ ${esc(c)}</span>`).join("")}</div>` : ""}
+    ${v.target ? `<div class="vsub" style="margin-top:4px">Target: <b>${esc(v.target)}</b></div>` : ""}</div>`;
+
+  // maneuvers first — most actionable
+  if (v.maneuvers?.length) {
+    h += `<div class="sec"><h3>Planned maneuvers</h3>`;
+    v.maneuvers.forEach((m, i) => {
+      const missed = m.time_until_s < 0, a = m.after;
+      h += `<div class="card ${missed ? "missed" : ""}"><div class="h"><span>Node ${i + 1} · ${kdate(m.ut)}</span>
+        <span class="t">${missed ? "MISSED " + dur(-m.time_until_s, true) + " ago" : "T− " + dur(m.time_until_s)}</span></div>
+        <div class="dv">Δv <b>${num(m.total, 1)} m/s</b> · pro ${num(m.prograde, 1)} · nrm ${num(m.normal, 1)} · rad ${num(m.radial, 1)}</div>
+        ${a ? `<div class="after">→ Ap ${dist(a.ap_alt)} · Pe ${dist(a.pe_alt)} · e ${num(a.ECC, 5)} · inc ${num(a.INC, 2)}°<br>→ period ${dur(a.period_s)}</div>
+               ${a.kerbin_relative_at_burn ? `<div style="margin-top:6px">${kerbinBox(a.kerbin_relative_at_burn, "At burn vs Kerbin")}</div>` : ""}`
+             : `<div class="after">post-burn orbit not predicted (escape or SOI change)</div>`}</div>`;
+    });
+    h += `</div>`;
+  }
+
+  const myAlarms = (D.alarms || []).filter(a => a.vessel === v.name || (a.title || "").toLowerCase().includes(v.name.toLowerCase()));
+  if (myAlarms.length) h += `<div class="sec"><h3>Alarms</h3>${myAlarms.map(a => `<div class="card" style="border-left-color:var(--accent)">
+      <div class="h"><span>⏰ ${esc(a.title)}</span><span class="t" style="color:var(--accent)">${a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s)}</span></div>
+      <div class="after">${kdate(a.ut)} · ${esc(a.type)}${a.description ? " · " + esc(a.description) : ""}</div></div>`).join("")}</div>`;
+
+  h += `<div class="sec"><h3>${landed ? "Position" : "Orbit"}</h3>`;
+  if (landed) h += `<dl class="kv"><dt>Body</dt><dd>${esc(o.body)}</dd><dt>Latitude</dt><dd>${num(v.lat, 3)}°</dd><dt>Longitude</dt><dd>${num(v.lon, 3)}°</dd><dt>Altitude</dt><dd>${num(v.alt)} m</dd>${v.landed_at ? `<dt>At</dt><dd>${esc(v.landed_at)}</dd>` : ""}</dl>`;
+  else if (fin(o.SMA)) h += orbitKV(o);
+  h += `</div>`;
+  if (v.kerbin_relative) h += `<div class="sec"><h3>Relative to Kerbin</h3>${kerbinBox(v.kerbin_relative, "Phase")}</div>`;
+
+  const res = RES.filter(([k]) => v.resources[k] && v.resources[k][1] > 0);
+  if (res.length) h += `<div class="sec"><h3>Resources</h3>${res.map(([k, l, c]) => bar(l, v.resources[k][0], v.resources[k][1], c)).join("")}</div>`;
+
+  const dv = Object.entries(v.dv_estimate_ms || {});
+  h += `<div class="sec"><h3>Propulsion & mass</h3><dl class="kv">
+    <dt>Mass</dt><dd>${num(v.wet_mass_t, 2)} t <span class="dim">(${num(v.dry_mass_t, 2)} dry)</span></dd>
+    <dt>Parts</dt><dd>${v.parts_count}</dd>
+    ${dv.map(([g, x]) => `<dt>Δv (${g})</dt><dd>${num(x)} m/s</dd>`).join("")}
+    </dl>${v.engines.length ? `<div class="tags" style="margin-top:6px">${[...new Set(v.engines)].map(e => `<span class="tag">${esc(e)} ×${v.engines.filter(x => x === e).length}</span>`).join("")}</div>` : ""}
+    ${dv.length > 1 ? `<div class="dim" style="font-size:11px;margin-top:4px">Each Δv assumes the other propellants are dead weight; staging ignored.</div>` : ""}</div>`;
+
+  // comms
+  const ants = [...new Set(v.antennas)];
+  const dk = distToKerbin(v);
+  let comm = ants.map(a => {
+    const [p, relay] = ANT[a] || [0, 0]; const rng = Math.sqrt(p * DSN);
+    const ok = dk == null ? "" : rng >= dk ? `<span class="good">✓</span>` : `<span class="bad">✗</span>`;
+    return `<span class="tag ${relay ? "relay" : ""}" title="${relay ? "Relay" : "Direct"} · ${p.toExponential(1)}">${esc(a)} ×${v.antennas.filter(x => x === a).length} · DSN ${dist(rng)} ${ok}</span>`;
+  }).join("");
+  h += `<div class="sec"><h3>Comms & science</h3>
+    ${dk != null ? `<div class="dim" style="margin-bottom:6px">Distance to Kerbin: <b class="mono" style="color:var(--text)">${dist(dk)}</b> (range check ignores occlusion)</div>` : ""}
+    <div class="tags">${comm || '<span class="dim">probe-core antenna only</span>'}</div>
+    <dl class="kv" style="margin-top:8px">
+      ${v.labs ? `<dt>Science lab</dt><dd>${v.labs} · data ${num(v.lab_data, 1)}</dd>` : ""}
+      ${v.stored_science_items ? `<dt>Science results aboard</dt><dd>${v.stored_science_items}</dd>` : ""}
+      ${v.docking_ports ? `<dt>Docking ports</dt><dd>${v.docking_ports}</dd>` : ""}
+    </dl></div>`;
+  $("side").innerHTML = h;
+}
+
+// ------------------------------------------------------------ tabs
+function alerts() {
+  const out = [];
+  for (const v of D.vessels) {
+    if (MINOR.has(v.type)) continue;
+    for (const m of v.maneuvers || []) {
+      if (m.time_until_s < 0) out.push({ sev: "bad", icon: "⚠", text: `<b>${esc(v.name)}</b> missed maneuver (${num(m.total, 1)} m/s)`, right: dur(-m.time_until_s, true) + " ago", id: vid(v), k: -1e12 });
+      else out.push({ sev: m.time_until_s < 7 * DAY ? "warn" : "info", icon: "◆", text: `<b>${esc(v.name)}</b> maneuver ${num(m.total, 1)} m/s @ ${kdate(m.ut)}`, right: "T− " + dur(m.time_until_s, true), id: vid(v), k: m.time_until_s });
+    }
+    const ec = v.resources.ElectricCharge;
+    if (ec && ec[1] > 0 && ec[0] / ec[1] < 0.1) out.push({ sev: "bad", icon: "⚡", text: `<b>${esc(v.name)}</b> low electric charge`, right: `${num(ec[0] / ec[1] * 100)}%`, id: vid(v), k: -1e11 });
+    if (v.engines.length) {
+      const lf = v.resources.LiquidFuel;
+      if (lf && lf[1] > 0 && lf[0] / lf[1] < 0.1) out.push({ sev: "warn", icon: "⛽", text: `<b>${esc(v.name)}</b> low liquid fuel`, right: `${num(lf[0] / lf[1] * 100)}%`, id: vid(v), k: -1e10 });
+    }
+    if (v.kerbin_relative?.in_kerbin_soi === false && v.kerbin_relative.distance_m < 1.2 * 84159286) out.push({ sev: "warn", icon: "◎", text: `<b>${esc(v.name)}</b> near Kerbin SOI edge`, right: dist(v.kerbin_relative.distance_m), id: vid(v), k: -1e9 });
+  }
+  for (const a of D.alarms || []) {
+    if (a.triggered) continue;
+    const v = a.vessel && D.vessels.find(x => x.name === a.vessel);
+    out.push({ sev: a.time_until_s < 0 ? "bad" : a.time_until_s < 7 * DAY ? "warn" : "info", icon: "⏰",
+      text: `Alarm <b>${esc(a.title)}</b>${a.vessel ? ` · ${esc(a.vessel)}` : ""} @ ${kdate(a.ut)}`,
+      right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: v ? vid(v) : null, k: a.time_until_s });
+  }
+  for (const c of D.contracts) if (c.state === "Active" && c.time_left_s != null && c.time_left_s < 30 * DAY)
+    out.push({ sev: c.time_left_s < 5 * DAY ? "bad" : "warn", icon: "✎", text: `Contract <b>${esc(c.type)}</b> deadline`, right: dur(c.time_left_s, true), k: c.time_left_s });
+  return out.sort((a, b) => a.k - b.k);
+}
+function rings() {
+  const byBody = {};
+  for (const v of D.vessels) {
+    if (MINOR.has(v.type) || v.situation !== "ORBITING") continue;
+    const relays = v.antennas.filter(a => ANT[a]?.[1]);
+    if (!relays.length) continue;
+    (byBody[v.orbit.ref] ||= []).push({ v, best: relays.sort((a, b) => ANT[b][0] - ANT[a][0])[0] });
+  }
+  const ut = D.header.ut;
+  return BODY_ORDER.filter(b => byBody[b]).map(b => {
+    const list = byBody[b];
+    const angs = list.map(x => { const p = vesselLocal(x.v, ut); return p ? (Math.atan2(p[1], p[0]) * 180 / Math.PI + 360) % 360 : null; });
+    list.forEach((x, i) => x.ang = angs[i]);
+    let status = "partial", ring = [];
+    if (b === 0) status = "helio";
+    else if (b === 1) status = "ground";
+    else {
+      // look for any cluster of ≥3 relays sharing an altitude (±2%), well spread, above the body radius
+      const R = D.planets[b].radius;
+      for (const seed of list) {
+        const cl = list.filter(x => Math.abs(x.v.orbit.SMA - seed.v.orbit.SMA) / seed.v.orbit.SMA < 0.02 && x.ang != null);
+        if (cl.length < 3) continue;
+        const a = cl.map(x => x.ang).sort((x, y) => x - y);
+        let minGap = 360; for (let i = 0; i < a.length; i++) minGap = Math.min(minGap, ((a[(i + 1) % a.length] - a[i]) + 360) % 360 || 360);
+        if (minGap > 90 && Math.min(...cl.map(x => x.v.orbit.pe_alt)) > R) { status = "ok"; ring = cl; break; }
+      }
+    }
+    return { b, list, angs, status, ring };
+  });
+}
+function renderTabs() {
+  const al = alerts(), hot = al.filter(a => a.sev === "bad").length;
+  const act = D.contracts.filter(c => c.state === "Active").length;
+  const tabs = [["alerts", "Alerts", al.length, hot], ["kerbals", "Kerbals", D.kerbals.length], ["contracts", "Contracts", act], ["network", "Network"], ["bodies", "Bodies"]];
+  $("tabbar").innerHTML = tabs.map(([k, l, n, hotN]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${l}${n != null ? `<span class="cnt ${hotN ? "hot" : ""}">${n}</span>` : ""}</button>`).join("");
+  let h = "";
+  if (S.tab === "alerts") {
+    h = al.length ? al.map(a => `<div class="alert" ${a.id ? `data-id="${esc(a.id)}"` : ""}><span class="sev${a.sev}">${a.icon}</span><span>${a.text}</span><span class="mono dim">${a.right}</span></div>`).join("")
+      : `<div class="empty">All quiet. No maneuvers, low resources or deadlines.</div>`;
+  } else if (S.tab === "kerbals") {
+    const ks = [...D.kerbals].sort((a, b) => (a.state !== "Assigned") - (b.state !== "Assigned") || b.xp - a.xp || a.name.localeCompare(b.name));
+    h = `<table><tr><th>Name</th><th>Trait</th><th>State</th><th>Vessel</th><th>Level</th><th>XP → next</th><th>If recovered</th><th class="num">Flights</th><th>Best per body</th></tr>` +
+      ks.map(k => {
+        const next = XP_LEVELS[k.level + 1], prev = XP_LEVELS[k.level];
+        const pct = next ? (k.xp - prev) / (next - prev) * 100 : 100;
+        const v = k.vessel && D.vessels.find(x => x.name === k.vessel);
+        return `<tr class="${v ? "click" : ""}" ${v ? `data-id="${esc(vid(v))}"` : ""}>
+          <td><b>${esc(k.name)}</b>${k.veteran ? ' <span class="dim" title="Veteran">★</span>' : ""}</td><td>${esc(k.trait)}</td>
+          <td class="${k.state === "Assigned" ? "good" : k.state === "Dead" || k.state === "Missing" ? "bad" : "dim"}">${esc(k.state)}</td>
+          <td>${esc(k.vessel || "")}</td>
+          <td><span class="pips">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= k.level ? "on" : ""}"></i>`).join("")}</span> ${k.level}</td>
+          <td><span class="xpbar"><i style="width:${pct}%"></i></span> <span class="mono dim">${k.xp}${next ? "/" + next : ""}</span></td>
+          <td>${k.xp_if_recovered_now > k.xp ? `<span class="good">L${k.level_if_recovered_now} (${k.xp_if_recovered_now})</span>` : ""}</td>
+          <td class="num">${k.flights}</td>
+          <td class="dim">${Object.entries(k.best_by_body).map(([b, a]) => `${b}:${a}`).join(", ")}</td></tr>`;
+      }).join("") + `</table><div class="dim" style="padding:8px 10px;font-size:11px">XP is estimated from flight logs; verify against the Astronaut Complex.</div>`;
+  } else if (S.tab === "contracts") {
+    const A = D.contracts.filter(c => c.state === "Active"), O = D.contracts.filter(c => c.state === "Offered");
+    h = `<div class="grid2">` + A.map(c => `<div class="box contract"><h4>${esc(c.type)}${c.target_body ? ` · <span class="dim">${esc(c.target_body)}</span>` : ""}</h4>
+        <div class="dim">${esc(c.agent)}</div>
+        <div class="mono" style="margin-top:4px"><span class="good">√ ${num(c.funds_completion)}</span> · ${num(c.science, 1)} sci · ${num(c.rep_completion, 1)} rep · <span class="${c.time_left_s != null && c.time_left_s < 30 * DAY ? "warn" : "dim"}">${c.time_left_s != null ? dur(c.time_left_s, true) + " left" : "no deadline"}</span></div>
+        <ul>${c.params.map(p => `<li class="${p.state === "Complete" ? "done" : ""}">${esc(p.name)}${Object.entries(p).filter(([k]) => k !== "name" && k !== "state").map(([k, v]) => ` <span class="dim">${esc(k)}=${esc(v)}</span>`).join("")}</li>`).join("")}</ul></div>`).join("") + `</div>` +
+      `<table><tr><th>Offered</th><th>Body</th><th class="num">Advance</th><th class="num">Reward</th><th class="num">Sci</th><th class="num">Rep</th><th>Agent</th><th class="num">Expires</th></tr>` +
+      O.map(c => `<tr><td>${esc(c.type)}</td><td>${esc(c.target_body || "")}</td><td class="num">${num(c.funds_advance)}</td><td class="num good">${num(c.funds_completion)}</td><td class="num">${num(c.science, 1)}</td><td class="num">${num(c.rep_completion, 1)}</td><td class="dim">${esc(c.agent)}</td><td class="num dim">${c.time_left_s != null ? dur(c.time_left_s, true) : ""}</td></tr>`).join("") + `</table>`;
+  } else if (S.tab === "network") {
+    const rs = rings();
+    h = `<table><tr><th>Body</th><th>Status</th><th>Relays (· altitude · phase angle; green = ring member)</th></tr>` + rs.map(r => {
+      const st = r.status === "ok" ? `<span class="good">3-ring ✓</span>` : r.status === "helio" ? `<span class="dim">heliocentric</span>`
+        : r.status === "ground" ? `<span class="good">ground stations ✓</span>` : `<span class="warn">no complete ring</span>`;
+      return `<tr><td><b>${esc(bodyName(r.b))}</b></td><td>${st}</td>
+        <td>${r.list.map(x => `<span class="tag relay" data-id="${esc(vid(x.v))}" style="cursor:pointer;${r.ring.includes(x) ? "border-color:var(--good)" : ""}">${esc(x.v.name)} · ${esc(x.best)} · ${dist(x.v.orbit.ap_alt)}${x.ang != null ? " · " + num(x.ang, 0) + "°" : ""}</span>`).join(" ")}</td></tr>`;
+    }).join("") + `</table><div class="dim" style="padding:8px 10px;font-size:11px">Ring ✓ = ≥3 relays at the same altitude (±2%), ≥90° apart, ring altitude above the body radius. DSN = 250 G (Tracking Station L3).</div>`;
+  } else if (S.tab === "bodies") {
+    const ut = D.header.ut, k = helioPos(1, ut);
+    h = `<table><tr><th>Body</th><th>Parent</th><th class="num">Radius</th><th class="num">Atmosphere</th><th class="num">SOI</th><th class="num">Distance to Kerbin now</th><th class="num">Vessels</th></tr>` +
+      BODY_ORDER.map(i => {
+        const b = D.planets[i], p = helioPos(i, ut), d = i === 1 ? 0 : Math.hypot(p[0] - k[0], p[1] - k[1], p[2] - k[2]);
+        const n = D.vessels.filter(v => v.orbit?.ref === i && !MINOR.has(v.type)).length;
+        return `<tr class="click" data-body="${i}"><td><span style="color:${b.color}">●</span> <b>${esc(b.name)}</b></td><td class="dim">${b.parent == null ? "" : esc(bodyName(b.parent))}</td>
+          <td class="num">${dist(b.radius)}</td><td class="num">${b.atm ? dist(b.atm) : "—"}</td><td class="num">${b.soi ? dist(b.soi) : "—"}</td>
+          <td class="num">${i === 1 ? "—" : dist(d)}</td><td class="num">${n || ""}</td></tr>`;
+      }).join("") + `</table>`;
+  }
+  $("tabbody").innerHTML = h;
+}
+
+// ------------------------------------------------------------ map
+const cv = $("map"), ctx = cv.getContext("2d");
+let hits = [];
+function focusBody() { return S.focus ?? 1; }
+function mapObjects() {
+  const f = focusBody(), ut = D.header.ut, fb = D.planets[f];
+  const soi = fb.soi || 2e11;
+  const children = D.planets.filter(p => p.parent === f);
+  const vs = D.vessels.filter(v => v.orbit?.ref === f && v.situation !== "LANDED" && v.situation !== "SPLASHED" && v.situation !== "PRELAUNCH" && (visible(v) || vid(v) === S.sel));
+  return { f, ut, fb, soi, children, vs };
+}
+function fitView(toSel) {
+  const { fb, soi, children, vs } = mapObjects();
+  const W = cv.clientWidth, H = cv.clientHeight;
+  let ext = fb.radius * 3;
+  const sel = selected();
+  if (toSel && sel && sel.orbit?.ref === focusBody()) {
+    const p = vesselLocal(sel, D.header.ut);
+    let span = Math.max(fb.radius * 2, (fin(sel.orbit.ap_alt) ? sel.orbit.ap_alt + fb.radius : soi) * 0.25);
+    if (sel.kerbin_relative) span = Math.max(sel.kerbin_relative.distance_m * 1.6, 1.5e8);
+    S.view = { cx: p[0], cy: p[1], scale: Math.min(W, H) / 2 / span };
+    return;
+  }
+  // planet/moon view: frame the craft if there are any (zoom out to see moons), else the moons
+  const craft = vs.filter(v => !MINOR.has(v.type));
+  if (craft.length) for (const v of craft) { const o = v.orbit; ext = Math.max(ext, o.ECC < 1 && o.SMA > 0 ? o.SMA * (1 + o.ECC) : Math.min(soi, Math.abs(o.SMA) * 4)); }
+  else for (const c of children) ext = Math.max(ext, c.orbit.SMA * (1 + c.orbit.ECC));
+  if (focusBody() === 0) { // don't let one far object squash the inner system
+    const vex = vs.length ? Math.max(...vs.map(v => v.orbit.ECC < 1 ? v.orbit.SMA * (1 + v.orbit.ECC) : 0)) : 0;
+    ext = Math.max(vex, D.planets[1].orbit.SMA) * 1.08;
+  }
+  ext = Math.min(ext * 1.08, soi);
+  S.view = { cx: 0, cy: 0, scale: Math.min(W, H) / 2 / ext };
+}
+function w2s(p) { const v = S.view; return [cv.clientWidth / 2 + (p[0] - v.cx) * v.scale, cv.clientHeight / 2 - (p[1] - v.cy) * v.scale]; }
+function drawPath(pts, color, width, dash) {
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+  pts.forEach((p, i) => { const s = w2s(p); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
+  ctx.stroke(); ctx.setLineDash([]);
+}
+function circle(c, r, fill, stroke, w, dash) {
+  ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, 2 * Math.PI);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = w || 1; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]); }
+}
+function label(txt, s, color, dy = -9) { ctx.fillStyle = color; ctx.font = "11px -apple-system, sans-serif"; ctx.textAlign = "center"; ctx.fillText(txt, s[0], s[1] + dy); }
+function drawMap() {
+  if (!D) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#04070a"; ctx.fillRect(0, 0, W, H);
+  if (!S.view) fitView();
+  const { f, ut, fb, soi, children, vs } = mapObjects();
+  hits = [];
+  // grid rings
+  const sc = S.view.scale;
+  const step = Math.pow(10, Math.floor(Math.log10(150 / sc)));
+  // body + atmosphere + SOI
+  const c0 = w2s([0, 0]);
+  if (fb.atm) circle(c0, Math.max((fb.radius + fb.atm) * sc, 4), null, "rgba(70,195,255,.35)", 1, [3, 3]);
+  circle(c0, Math.max(fb.radius * sc, f === 0 ? 6 : 4), fb.color, null);
+  if (f !== 0 && fb.soi && fb.soi * sc < 4 * Math.max(W, H)) circle(c0, fb.soi * sc, null, "rgba(255,255,255,.12)", 1, [6, 6]);
+  label(fb.name, c0, "#fff", -Math.max(fb.radius * sc, 6) - 6);
+  // children (planets or moons)
+  for (const c of children) {
+    drawPath(orbitPath(c.orbit, soi), c.color + "66", 1);
+    const p = posAt(c.orbit, ut, fb.GM), s = w2s(p);
+    if (c.soi && c.soi * sc > 3) circle(s, c.soi * sc, null, c.color + "55", 1, [4, 4]);
+    circle(s, Math.max(c.radius * sc, 4), c.color, null);
+    label(c.name, s, c.color, -Math.max(c.radius * sc, 4) - 5);
+    hits.push({ s, r: Math.max(c.radius * sc, 8), body: c.idx, name: c.name });
+  }
+  // vessels
+  const sel = selected();
+  for (const v of vs) {
+    const isSel = v === sel, col = TYPE_COLOR[v.type] || "#aaa";
+    if (!isSel) drawPath(orbitPath(v.orbit, soi), col + (MINOR.has(v.type) ? "33" : "55"), 1);
+  }
+  if (sel && sel.orbit?.ref === f && vs.includes(sel)) {
+    drawPath(orbitPath(sel.orbit, soi), "#46c3ff", 2);
+    // Ap / Pe markers
+    if (sel.orbit.ECC < 1) {
+      const pe = w2s(posAtNu(sel.orbit, 0)), ap = w2s(posAtNu(sel.orbit, Math.PI));
+      circle(pe, 3.5, "#46c3ff"); label("Pe " + dist(sel.orbit.pe_alt), pe, "#9fdcff", 16);
+      circle(ap, 3.5, "#46c3ff"); label("Ap " + dist(sel.orbit.ap_alt), ap, "#9fdcff", 16);
+    }
+    let prev = sel.orbit;
+    for (const m of sel.maneuvers || []) {
+      const node = w2s(posAt(prev, m.ut, fb.GM));
+      ctx.save(); ctx.translate(node[0], node[1]); ctx.rotate(Math.PI / 4); ctx.fillStyle = "#ffb547"; ctx.fillRect(-5, -5, 10, 10); ctx.restore();
+      label(`${num(m.total, 1)} m/s`, node, "#ffb547", -10);
+      if (m.after) { drawPath(orbitPath(m.after, soi), "#ffb547", 1.6, [7, 5]); prev = m.after; } else break;
+    }
+    // line to Kerbin for heliocentric craft
+    if (f === 0) {
+      const ks = w2s(posAt(D.planets[1].orbit, ut, fb.GM)), ss = w2s(vesselLocal(sel, ut));
+      ctx.beginPath(); ctx.moveTo(ss[0], ss[1]); ctx.lineTo(ks[0], ks[1]); ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.setLineDash([2, 4]); ctx.stroke(); ctx.setLineDash([]);
+      if (sel.kerbin_relative) label(dist(sel.kerbin_relative.distance_m), [(ss[0] + ks[0]) / 2, (ss[1] + ks[1]) / 2], "#ddd", -4);
+    }
+  }
+  for (const v of vs) {
+    const p = vesselLocal(v, ut); if (!p) continue;
+    const s = w2s(p), isSel = v === sel, col = TYPE_COLOR[v.type] || "#aaa";
+    ctx.save(); ctx.translate(s[0], s[1]); ctx.rotate(Math.PI / 4);
+    const z = isSel ? 6 : MINOR.has(v.type) ? 2.5 : 4;
+    ctx.fillStyle = col; ctx.fillRect(-z, -z, 2 * z, 2 * z);
+    if (isSel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.strokeRect(-z - 3, -z - 3, 2 * z + 6, 2 * z + 6); }
+    ctx.restore();
+    if (isSel || (!MINOR.has(v.type) && sc * (v.orbit.SMA || 0) > 60)) label(v.name, s, isSel ? "#fff" : col + "cc", isSel ? -14 : -9);
+    hits.push({ s, r: 9, id: vid(v), name: v.name });
+  }
+  // scale bar
+  const barM = step * (150 / sc / step > 5 ? 5 : 150 / sc / step > 2 ? 2 : 1), barPx = barM * sc;
+  ctx.strokeStyle = "#7f97ab"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(W - 20 - barPx, H - 40); ctx.lineTo(W - 20, H - 40); ctx.stroke();
+  ctx.fillStyle = "#7f97ab"; ctx.font = "11px ui-monospace, monospace"; ctx.textAlign = "right"; ctx.fillText(dist(barM), W - 20, H - 46);
+  const landedHere = D.vessels.filter(v => v.orbit?.ref === f && ["LANDED", "SPLASHED"].includes(v.situation) && !MINOR.has(v.type)).length;
+  $("mapinfo").textContent = `${fb.name} · ${vs.filter(v => !MINOR.has(v.type)).length} in flight${landedHere ? ` · ${landedHere} landed` : ""} · positions at ${kdate(ut)}`;
+}
+// map interaction
+let drag = null;
+cv.addEventListener("mousedown", e => { drag = { x: e.clientX, y: e.clientY, cx: S.view.cx, cy: S.view.cy, moved: false }; cv.classList.add("drag"); });
+window.addEventListener("mouseup", e => {
+  cv.classList.remove("drag");
+  if (drag && !drag.moved && e.target === cv) {
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    let best = null, bd = 1e9;
+    for (const h of hits) { const d = Math.hypot(h.s[0] - x, h.s[1] - y); if (d < Math.max(h.r, 9) && d < bd) { bd = d; best = h; } }
+    if (best?.id) select(best.id, false); else if (best?.body != null) setFocus(best.body);
+  }
+  drag = null;
+});
+window.addEventListener("mousemove", e => {
+  if (drag) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    S.view.cx = drag.cx - dx / S.view.scale; S.view.cy = drag.cy + dy / S.view.scale; drawMap(); return;
+  }
+  if (e.target !== cv) { $("tip").style.display = "none"; return; }
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const h = hits.find(h => Math.hypot(h.s[0] - x, h.s[1] - y) < Math.max(h.r, 9));
+  const tip = $("tip");
+  if (h) { tip.style.display = "block"; tip.style.left = x + 14 + "px"; tip.style.top = y + 8 + "px"; tip.textContent = h.name + (h.body != null ? " — click to focus" : ""); }
+  else tip.style.display = "none";
+});
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left - cv.clientWidth / 2, y = e.clientY - r.top - cv.clientHeight / 2;
+  const wx = S.view.cx + x / S.view.scale, wy = S.view.cy - y / S.view.scale;
+  S.view.scale *= Math.exp(-e.deltaY * 0.0015);
+  S.view.cx = wx - x / S.view.scale; S.view.cy = wy + y / S.view.scale; drawMap();
+}, { passive: false });
+new ResizeObserver(() => drawMap()).observe($("mapwrap"));
+
+// ------------------------------------------------------------ actions
+function setFocus(b, keepView) {
+  if (S.focus !== b || !keepView) { S.focus = b; store.set("focus", b); S.view = null; }
+  renderFocus(); drawMap();
+}
+function select(id, fromList) {
+  S.sel = id; store.set("sel", id);
+  const v = selected();
+  if (v?.orbit?.ref != null && v.orbit.ref !== focusBody()) { S.focus = v.orbit.ref; store.set("focus", S.focus); S.view = null; }
+  renderList(); renderSide(); renderFocus(); drawMap();
+  if (fromList) document.querySelector(".vrow.sel")?.scrollIntoView({ block: "nearest" });
+}
+function renderFocus() {
+  $("focus").innerHTML = BODY_ORDER.map(i => `<option value="${i}" ${i === focusBody() ? "selected" : ""}>${D.planets[i].parent && D.planets[i].parent !== 0 ? "  └ " : ""}${D.planets[i].name}</option>`).join("");
+  $("btnUp").disabled = focusBody() === 0;
+}
+$("focus").addEventListener("change", e => setFocus(+e.target.value));
+$("btnFit").addEventListener("click", () => { fitView(); drawMap(); });
+$("btnSel").addEventListener("click", () => { const v = selected(); if (!v) return; if (v.orbit?.ref !== focusBody()) { S.focus = v.orbit.ref; renderFocus(); } fitView(true); drawMap(); });
+$("btnUp").addEventListener("click", () => { const p = D.planets[focusBody()].parent; if (p != null) setFocus(p); });
+$("search").addEventListener("input", e => { S.q = e.target.value.trim().toLowerCase(); renderList(); drawMap(); });
+$("filters").addEventListener("click", e => {
+  const t = e.target.dataset.t; if (!t) return;
+  S.filters.has(t) ? S.filters.delete(t) : S.filters.add(t); store.set("filters", [...S.filters]);
+  renderFilters(); renderList(); drawMap();
+});
+$("vlist").addEventListener("click", e => {
+  const row = e.target.closest(".vrow"); if (row) return select(row.dataset.id, true);
+  const hb = e.target.closest(".bodyhdr"); if (hb) setFocus(+hb.dataset.body);
+});
+$("tabbar").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.tab = b.dataset.tab; store.set("tab", S.tab); renderTabs(); });
+$("tabbody").addEventListener("click", e => {
+  const el = e.target.closest("[data-id]"); if (el) return select(el.dataset.id, true);
+  const b = e.target.closest("[data-body]"); if (b) setFocus(+b.dataset.body);
+});
+
+// ------------------------------------------------------------ render
+function renderAll() {
+  $("nodata").style.display = "none";
+  if (S.sel && !selected()) S.sel = null;
+  if (!S.sel) { const st = D.vessels.find(v => v.type === "Station") || D.vessels.find(v => !MINOR.has(v.type)); if (st) S.sel = vid(st); }
+  if (S.focus == null) S.focus = selected()?.orbit?.ref ?? 1;
+  const keepView = S.view;
+  renderTop(); renderFilters(); renderList(); renderSide(); renderTabs(); renderFocus();
+  S.view = keepView; drawMap();
+}
+load();
+</script>
+</body>
+</html>

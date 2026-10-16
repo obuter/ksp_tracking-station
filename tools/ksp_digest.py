@@ -725,6 +725,7 @@ def build(save, show_all, to_stdout=False):
         header=dict(title=game.get("Title"), mode=game.get("Mode"), version=game.get("version"),
                     ut=ut, date=ksp_date(ut), file=save.name,
                     mtime=dt.datetime.fromtimestamp(save.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    mtime_epoch=save.stat().st_mtime,  # timezone-free; the dashboard's age indicator uses this
                     generated_at=dt.datetime.now().isoformat(timespec="seconds")),
         career=career(game),
         kerbals=kerbals(game, crew_map),

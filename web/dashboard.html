@@ -291,8 +291,9 @@ setInterval(() => D && renderTop(), 1000);
 // ------------------------------------------------------------ top bar
 function renderTop() {
   const h = D.header, c = D.career;
-  const saved = new Date(h.mtime.replace(" ", "T"));
-  const age = (Date.now() - saved) / 1000;
+  // mtime_epoch is timezone-free; the local-time string is only a fallback for digests from older script versions
+  const savedMs = fin(h.mtime_epoch) ? h.mtime_epoch * 1000 : new Date(h.mtime.replace(" ", "T")).getTime();
+  const age = Math.max(0, (Date.now() - savedMs) / 1000);
   const cls = age < 120 ? "" : age < 900 ? "stale" : "dead";
   const ageTxt = age < 60 ? Math.round(age) + " s ago" : age < 3600 ? Math.round(age / 60) + " min ago" : Math.round(age / 3600) + " h ago";
   const facs = Object.entries(c.facilities || {}).map(([k, v]) =>

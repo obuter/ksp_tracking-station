@@ -29,7 +29,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 
 ## digest.json schema (top level)
 
-- `header`: title, mode, version, ut, date, file, mtime, generated_at
+- `header`: title, mode, version, ut, date, file, mtime (local-time string, display only), mtime_epoch (use for age maths), generated_at
 - `career`: funds, science, reputation, techs_unlocked, facilities{name: 1–3}
 - `kerbals[]`: name, trait, type, state, vessel, xp, level, xp_if_recovered_now, level_if_recovered_now, flights, best_by_body
 - `vessels[]`: pid, name, type, situation, lat/lon/alt, crew, `orbit`{body, ref, SMA, ECC, INC, LAN, LPE, MNA, EPH, ap_alt, pe_alt, period_s}, resources{name:[cur,max]}, antennas, engines, dv_estimate_ms, labs, lab_data, docking_ports, target, `maneuvers[]`{ut, date, time_until_s, prograde, normal, radial, total, after{orbit…, kerbin_relative_at_burn}}, `kerbin_relative` (Kerbol orbiters only)

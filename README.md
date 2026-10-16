@@ -12,13 +12,20 @@ Pure Python standard library and a single HTML file. No installs, no internet.
 
 ## Usage
 
+**1. Get it** (once):
+
 ```bash
 git clone https://github.com/obuter/ksp_tracking-station.git
 cd ksp_tracking-station
+```
+
+**2. Run it** (every time you play, from the repo folder):
+
+```bash
 python3 tools/ksp_digest.py --serve
 ```
 
-Open **http://localhost:8765/web/dashboard.html** and play. The script watches your live save and regenerates whenever KSP writes it: quicksave (F5), scene changes and autosave. The page picks the change up within about 5 s.
+**3. Open the dashboard:** **http://localhost:8765/web/dashboard.html**, and play. The script watches your live save and regenerates whenever KSP writes it: quicksave (F5), scene changes and autosave. The page picks the change up within about 5 s.
 
 Other modes:
 

@@ -9,7 +9,9 @@ The player is in the game right now, often with the dashboard on a second monito
 
 ## Player setup
 
-- Stock KSP 1.12.5 career + Breaking Ground (Serenity). MechJeb and KER installed.
+- KSP 1.12.5 career + Breaking Ground (Serenity), stock planets. Gameplay mods: SCANsat, ContractConfigurator, OrbitalKeeper, [x] Science!, MechJeb2, KER, FuseboxContinued, Kopernicus, Chatterer.
+- Same career on Mac and Windows; Windows only adds visual mods (EVE, Scatterer, Parallax, Waterfall, …).
+- Check the install's `GameData` before claiming a mod is present or missing.
 - Stock CommNet, **Extra Ground Stations on**, Tracking Station L3: **DSN 250 G**. Kerbin needs no relays.
 - `requireSignalForControl = False`. Still treat any burn without a link as unsafe.
 - Network design and ring deployment rules: `docs/DSN_CheatSheet.md`.

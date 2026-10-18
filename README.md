@@ -2,6 +2,8 @@
 
 A second-monitor companion for **Kerbal Space Program 1.12** career games.
 
+**Live demo:** https://obuter.com/ksp_tracking-station/
+
 ![Tracking Station dashboard: vessel list, Kerbol system map, vessel details and alerts](docs/ksp-dash.png)
 
 - **`tools/ksp_digest.py`** reads your `.sfs` save, which can run to hundreds of thousands of lines, and writes a compact digest: career, facilities, kerbals (estimated XP), every vessel's orbit, resources, Δv, antennas, planned maneuver nodes (with the predicted orbit after each burn), alarms and contracts.

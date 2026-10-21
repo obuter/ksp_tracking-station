@@ -65,7 +65,7 @@ The script only **reads** the save. It never writes to the KSP folder.
 ## Notes and limitations
 
 - Kerbal XP is estimated from flight logs.
-- Δv is a rough single-stage estimate.
+- Δv is a vacuum estimate per stage: each stage burns the fuel in the parts it drops (no fuel-line rules; solid boosters ignored).
 - Maneuvers that cross into another body's SOI are not predicted yet.
 - Positions and countdowns are as of the last save, not the live game clock.
 

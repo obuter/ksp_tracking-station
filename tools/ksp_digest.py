@@ -74,19 +74,27 @@ ANTENNAS = {
     "commDish": ("Communotron 88-88", 100e9, False),
     "RelayAntenna100": ("RA-100", 100e9, True),
 }
-# part name -> (label, vacuum Isp, propellant group)
+# part name -> (label, vacuum Isp s, propellant group, vacuum thrust kN)
 ENGINES = {
-    "liquidEngine": ("Reliant", 310, "LFO"), "liquidEngine2": ("Swivel", 320, "LFO"),
-    "liquidEngine3": ("Terrier", 345, "LFO"), "liquidEngine1-2": ("Poodle", 350, "LFO"),
-    "liquidEngineMini": ("Spark", 320, "LFO"), "microEngine": ("Ant", 315, "LFO"),
-    "radialEngineMini": ("Spider", 290, "LFO"), "smallRadialEngine": ("Thud", 305, "LFO"),
-    "engineLargeSkipper": ("Skipper", 320, "LFO"), "liquidEngineMainsail": ("Mainsail", 310, "LFO"),
-    "Size2LFB": ("Twin-Boar", 300, "LFO"), "Size3EngineCluster": ("Mammoth", 315, "LFO"),
-    "Size3AdvancedEngine": ("Rhino", 340, "LFO"), "LiquidEngineLV-T91": ("Cheetah", 355, "LFO"),
-    "LiquidEngineLV-TX87": ("Bobcat", 310, "LFO"), "LiquidEngineRK-7": ("Kodiak", 317, "LFO"),
-    "LiquidEngineRV-1": ("Cub", 317, "LFO"), "nuclearEngine": ("LV-N Nerv", 800, "LF"),
-    "ionEngine": ("Dawn", 4200, "Xenon"), "omsEngine": ("Puff", 250, "Mono"),
+    "liquidEngine": ("Reliant", 310, "LFO", 240), "liquidEngine2": ("Swivel", 320, "LFO", 215),
+    "liquidEngine3": ("Terrier", 345, "LFO", 60), "liquidEngine2-2": ("Poodle", 350, "LFO", 250),
+    "liquidEngineMini": ("Spark", 320, "LFO", 20), "microEngine": ("Ant", 315, "LFO", 2),
+    "radialEngineMini": ("Spider", 290, "LFO", 2), "smallRadialEngine": ("Twitch", 290, "LFO", 16),
+    "radialLiquidEngine1-2": ("Thud", 305, "LFO", 120), "toroidalAerospike": ("Dart", 340, "LFO", 180),
+    "engineLargeSkipper": ("Skipper", 320, "LFO", 650), "liquidEngineMainsail": ("Mainsail", 310, "LFO", 1500),
+    "Size2LFB": ("Twin-Boar", 300, "LFO", 2000), "Size3EngineCluster": ("Mammoth", 315, "LFO", 4000),
+    "Size3AdvancedEngine": ("Rhino", 340, "LFO", 2000), "SSME": ("Vector", 315, "LFO", 1000),
+    "LiquidEngineLV-T91": ("Cheetah", 355, "LFO", 125), "LiquidEngineLV-TX87": ("Bobcat", 310, "LFO", 400),
+    "LiquidEngineRK-7": ("Kodiak", 317, "LFO", 260), "LiquidEngineRV-1": ("Cub", 317, "LFO", 32),
+    "nuclearEngine": ("LV-N Nerv", 800, "LF", 60), "ionEngine": ("Dawn", 4200, "Xenon", 2),
+    "omsEngine": ("Puff", 250, "Mono", 20),
 }
+# propellant group -> units of each resource per unit burned (LF:Ox is 9:11)
+PROPELLANTS = {"LFO": {"LiquidFuel": 0.9, "Oxidizer": 1.1}, "LF": {"LiquidFuel": 1},
+               "Xenon": {"XenonGas": 1}, "Mono": {"MonoPropellant": 1}}
+# part modules that split the craft when staged: decouplers, separators, launch clamps
+SEPARATORS = {"ModuleDecouple", "ModuleAnchoredDecoupler", "LaunchClamp"}
+G0 = 9.80665
 DENSITY = {"LiquidFuel": 0.005, "Oxidizer": 0.005, "MonoPropellant": 0.004, "XenonGas": 0.0001,
            "Ore": 0.01, "SolidFuel": 0.0075, "Ablator": 0.001}
 SHOW_RES = ["LiquidFuel", "Oxidizer", "MonoPropellant", "XenonGas", "Ore", "ElectricCharge"]
@@ -95,7 +103,7 @@ RES_SHORT = {"LiquidFuel": "LF", "Oxidizer": "Ox", "MonoPropellant": "Mono", "Xe
 MINOR_TYPES = {"Debris", "Flag", "SpaceObject", "DeployedScienceController", "DeployedSciencePart",
                "DroppedPart", "Unknown"}
 PARAM_KEYS = ["title", "targetBody", "targetType", "body", "situation", "vesselName", "partNames",
-              "partName", "minAltitude", "maxAltitude", "targetName", "location"]
+              "partName", "minAltitude", "maxAltitude", "targetName", "location", "scanName", "coverage"]
 
 # ---------------------------------------------------------------- ConfigNode parser
 
@@ -159,6 +167,13 @@ def f(x, default=0.0):
 
 def base_part(name):
     return re.sub(r"\.v\d+$", "", name or "")
+
+
+def body_name(x):
+    """Body from a save field: stock contracts store its index, ContractConfigurator its name."""
+    if not x:
+        return None
+    return BODIES.get(int(x), ("?",))[0] if x.isdigit() else x
 
 
 def ksp_date(ut):
@@ -397,6 +412,73 @@ def kerbals(game, crew_map):
     return out
 
 
+def separates_at(p):
+    """Stage in which this part splits the craft (an armed decoupler or launch clamp), else None."""
+    for m in p.nodes("MODULE"):
+        if (m.get("name") in SEPARATORS and m.get("isDecoupled") != "True"
+                and m.get("stagingEnabled") != "False"):  # heat shields: staging off
+            return int(f(p.get("istg")))
+    return None
+
+
+def stage_dv(parts):
+    """Vacuum Δv per stage, from the part tree (`parent`) and the staging order (`istg`).
+
+    A part leaves the craft when the first separator between it and the root part fires.
+    Each stage burns the propellant in the parts it is about to drop, with the engines lit by
+    then; the last stage burns what is left with every remaining engine. Simplified: no
+    fuel-flow rules, solid boosters are dead weight.
+    """
+    n = len(parts)
+    names = [base_part(p.get("name")) for p in parts]
+    parent = [int(f(p.get("parent"))) for p in parts]
+    istg = [int(f(p.get("istg"))) for p in parts]
+    sep = [separates_at(p) for p in parts]
+    mass = [f(p.get("mass")) + sum(DENSITY.get(r.get("name"), 0) * f(r.get("amount")) for r in p.nodes("RESOURCE"))
+            for p in parts]
+    drop = []  # stage in which each part leaves the craft; -1 = never
+    for i in range(n):
+        d, j = -1, i
+        for _ in range(n):  # walk up to the root part (its parent is itself)
+            if sep[j] is not None:
+                d = max(d, sep[j])
+            if parent[j] == j:
+                break
+            j = parent[j]
+        drop.append(d)
+    engines = [i for i in range(n) if names[i] in ENGINES]
+    events = {istg[i] for i in engines} | {s for s in sep if s is not None}
+
+    stages = []
+    for d in sorted(set(drop), reverse=True):
+        m = start = sum(mass[i] for i in range(n) if drop[i] <= d)
+        fuel = {}
+        for i in range(n):
+            if drop[i] == d:
+                for r in parts[i].nodes("RESOURCE"):
+                    fuel[r.get("name")] = fuel.get(r.get("name"), 0) + f(r.get("amount"))
+        lit = [i for i in engines if drop[i] <= d and (istg[i] > d or d < 0)]
+        dv, used = 0.0, []
+        for group, mix in PROPELLANTS.items():
+            engs = [ENGINES[names[i]] for i in lit if ENGINES[names[i]][2] == group]
+            units = min(fuel.get(r, 0) / k for r, k in mix.items())
+            burned = units * sum(k * DENSITY[r] for r, k in mix.items())
+            if not engs or units <= 0 or burned >= m:
+                continue
+            for r, k in mix.items():
+                fuel[r] -= units * k
+            isp = sum(e[3] for e in engs) / sum(e[3] / e[1] for e in engs)  # thrust-weighted
+            dv += isp * G0 * math.log(m / (m - burned))
+            m -= burned
+            used += [e[0] for e in engs]
+        if dv >= 1:
+            count = {e: used.count(e) for e in dict.fromkeys(used)}
+            stages.append(dict(stage=min((s for s in events if s > d), default=d + 1),
+                               engines=[f"{k}× {e}" if k > 1 else e for e, k in count.items()],
+                               dv_ms=round(dv), mass_t=round(start, 2)))
+    return stages
+
+
 def vessel(v, ut):
     o = v.node("ORBIT")
     orb = orbit_info(o) if o else {}
@@ -431,24 +513,7 @@ def vessel(v, ut):
                 science += 1 if mn == "ModuleScienceExperiment" else 0
             stored_data += len(m.nodes("ScienceData"))
     wet = dry + sum(DENSITY.get(k, 0) * a[0] for k, a in res.items())
-
-    def dv_for(group):
-        engs = [e for e in engines if e[2] == group]
-        if not engs:
-            return None
-        isp = sum(e[1] for e in engs) / len(engs)
-        props = {"LFO": ["LiquidFuel", "Oxidizer"], "LF": ["LiquidFuel"],
-                 "Xenon": ["XenonGas"], "Mono": ["MonoPropellant"]}[group]
-        if group == "LFO":
-            lf, ox = res.get("LiquidFuel", [0, 0])[0], res.get("Oxidizer", [0, 0])[0]
-            usable = min(lf, ox / 1.2222) * 2.2222 * 0.005
-        else:
-            usable = sum(res.get(pp, [0, 0])[0] * DENSITY[pp] for pp in props)
-        if usable <= 0 or wet <= usable:
-            return 0.0
-        return isp * 9.80665 * math.log(wet / (wet - usable))
-
-    dv = {g: round(x) for g in ("LFO", "LF", "Xenon", "Mono") if (x := dv_for(g)) is not None}
+    stages = stage_dv(v.nodes("PART"))
     best_relay = max((a for a in antennas if a[2]), key=lambda a: a[1], default=None)
     best_direct = max(antennas, key=lambda a: a[1], default=None)
     out = dict(
@@ -461,7 +526,8 @@ def vessel(v, ut):
         antennas=[a[0] for a in antennas],
         best_relay=best_relay[0] if best_relay else None,
         best_antenna_power=best_direct[1] if best_direct else None,
-        engines=[e[0] for e in engines], dv_estimate_ms=dv,
+        engines=[e[0] for e in engines],
+        dv_stages=stages, dv_total_ms=sum(s["dv_ms"] for s in stages),
         labs=len(labs), lab_data=round(lab_data, 1), stored_science_items=stored_data,
         docking_ports=ports,
     )
@@ -503,17 +569,17 @@ def contracts(game, ut):
                 continue
             vals = [f(x) for x in (c.get("values") or "").split(",")]
             vals += [0.0] * (12 - len(vals))
-            body = c.get("targetBody")
             params = []
             for p in c.nodes("PARAM"):
                 extra = {k: p.get(k) for k in PARAM_KEYS if p.get(k)}
                 if "targetBody" in extra:
-                    extra["targetBody"] = BODIES.get(int(f(extra["targetBody"])), ("?",))[0]
+                    extra["targetBody"] = body_name(extra["targetBody"])
                 params.append(dict(name=p.get("name"), state=p.get("state"), **extra))
             deadline = vals[10] if st == "Active" else vals[8]
             out.append(dict(
                 type=c.get("type"), state=st, agent=c.get("agent"),
-                target_body=BODIES.get(int(f(body)), ("?",))[0] if body else None,
+                title=(c.get("title") or "").rstrip(".") or None,  # ContractConfigurator only
+                target_body=body_name(c.get("targetBody")),
                 funds_advance=vals[2], funds_completion=vals[3], funds_failure=vals[4],
                 science=vals[5], rep_completion=vals[6], rep_failure=vals[7],
                 deadline_ut=deadline or None,
@@ -600,9 +666,12 @@ def render(d, show_all):
             bits = [f"{v['parts_count']} parts", f"{v['wet_mass_t']:g} t ({v['dry_mass_t']:g} t dry)"]
             if v["engines"]:
                 bits.append("engines: " + ", ".join(sorted(set(v["engines"]))))
-            if v["dv_estimate_ms"]:
-                bits.append("Δv≈ " + ", ".join(f"{g} {x:,} m/s" for g, x in v["dv_estimate_ms"].items()))
+            if len(v["dv_stages"]) == 1:
+                bits.append(f"Δv≈ {v['dv_total_ms']:,} m/s vac")
             L.append("- " + " · ".join(bits))
+            if len(v["dv_stages"]) > 1:
+                L.append(f"- Δv≈ {v['dv_total_ms']:,} m/s vac: " + " → ".join(
+                    f"S{s['stage']} {s['dv_ms']:,} ({', '.join(s['engines'])})" for s in v["dv_stages"]))
             extras = []
             if v["antennas"]:
                 extras.append("antennas: " + ", ".join(sorted(set(v["antennas"]))))
@@ -644,16 +713,20 @@ def render(d, show_all):
     L += ["## Contracts", "", f"### Active ({len(act)})", ""]
     for c in act:
         left = ksp_dur(c["time_left_s"]) if c["time_left_s"] else "no deadline"
-        L.append(f"**{c['type']}** — {c['agent']}" + (f" · {c['target_body']}" if c["target_body"] else "")
+        L.append(f"**{c['title'] or c['type']}** — {c['agent']}" + (f" · {c['target_body']}" if c["target_body"] else "")
                  + f" · reward {c['funds_completion']:,.0f} funds / {c['science']:g} sci / {c['rep_completion']:g} rep"
                  + f" · time left: {left}")
         for p in c["params"]:
-            extra = ", ".join(f"{k}={v}" for k, v in p.items() if k not in ("name", "state"))
-            L.append(f"- [{'x' if p['state'] == 'Complete' else ' '}] {p['name']}" + (f" ({extra})" if extra else ""))
+            if "scanName" in p:  # SCANsat coverage target
+                text = f"{p['scanName']} ≥{p.get('coverage', '?')}% · {p['state']}"
+            else:
+                extra = ", ".join(f"{k}={v}" for k, v in p.items() if k not in ("name", "state"))
+                text = p["name"] + (f" ({extra})" if extra else "")
+            L.append(f"- [{'x' if p['state'] == 'Complete' else ' '}] {text}")
         L.append("")
     L += [f"### Offered ({len(off)})", ""]
     L += md_table(["Type", "Body", "Funds", "Sci", "Rep", "Agent"],
-                  [(c["type"], c["target_body"] or "", f"{c['funds_completion']:,.0f}", f"{c['science']:g}",
+                  [(c["title"] or c["type"], c["target_body"] or "", f"{c['funds_completion']:,.0f}", f"{c['science']:g}",
                     f"{c['rep_completion']:g}", c["agent"]) for c in off]) + [""]
     return "\n".join(L)
 

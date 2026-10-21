@@ -32,8 +32,8 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 - `header`: title, mode, version, ut, date, file, mtime (local-time string, display only), mtime_epoch (use for age maths), generated_at
 - `career`: funds, science, reputation, techs_unlocked, facilities{name: 1–3}
 - `kerbals[]`: name, trait, type, state, vessel, xp, level, xp_if_recovered_now, level_if_recovered_now, flights, best_by_body
-- `vessels[]`: pid, name, type, situation, lat/lon/alt, crew, `orbit`{body, ref, SMA, ECC, INC, LAN, LPE, MNA, EPH, ap_alt, pe_alt, period_s}, resources{name:[cur,max]}, antennas, engines, dv_estimate_ms, labs, lab_data, docking_ports, target, `maneuvers[]`{ut, date, time_until_s, prograde, normal, radial, total, after{orbit…, kerbin_relative_at_burn}}, `kerbin_relative` (Kerbol orbiters only)
-- `contracts[]`: type, state, agent, target_body, funds_*, science, rep_*, deadline_ut, time_left_s, params[]
+- `vessels[]`: pid, name, type, situation, lat/lon/alt, crew, `orbit`{body, ref, SMA, ECC, INC, LAN, LPE, MNA, EPH, ap_alt, pe_alt, period_s}, resources{name:[cur,max]}, antennas, engines, `dv_stages[]`{stage, engines, dv_ms, mass_t} (vacuum, launch first), dv_total_ms, labs, lab_data, docking_ports, target, `maneuvers[]`{ut, date, time_until_s, prograde, normal, radial, total, after{orbit…, kerbin_relative_at_burn}}, `kerbin_relative` (Kerbol orbiters only)
+- `contracts[]`: type, state, agent, title (ContractConfigurator only), target_body, funds_*, science, rep_*, deadline_ut, time_left_s, params[]
 - `alarms[]`: title, type, description, vessel, ut, date, time_until_s, triggered, maneuver_ut
 - `planets[]`: idx, name, radius, GM, atm, parent, color, soi, orbit
 
@@ -47,6 +47,8 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 - Kerbin: SMA 13,599,840,256 m, ECC 0, MNA 3.14 at epoch 0. Kerbol radius 261.6 Mm.
 - The in-game Ap/Pe readout is **altitude above the surface**, not radius.
 - Alarm `vesselId` is the vessel's `persistentId` (not `pid`).
+- Contract `targetBody` is a body index in stock contracts but a body **name** in ContractConfigurator ones (`body_name()` handles both).
+- Staging: PART `parent` is the index of its parent part (root: itself); `istg` is the KSP stage number. Fired decouplers keep `isDecoupled = True`; heat shields carry `ModuleDecouple` with `stagingEnabled = False`.
 - Kerbals have no stored XP. It is estimated from `CAREER_LOG` with the `XP_*` table (unverified against the game).
 - Maneuvers after an SOI change are not predicted (current limitation).
 - A craft's `ORBIT` is in its current SOI's frame (`REF` = body index).
@@ -68,6 +70,6 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 - **SOI-aware prediction:** SOI entry time, arrival periapsis, and the orbit after a capture node. The play-session prototype used SOI search plus RK4 inside the SOI.
 - **CommNet link check:** per vessel and over burn windows, including occlusion (`occlusionMultiplierAtm` 0.75, `Vac` 0.9) and combined relay power `strongest × (sum/strongest)^0.75`.
 - **Verify the XP table** against the in-game Astronaut Complex.
-- **Δv per stage** (currently one lump per propellant group).
+- **Δv fuel flow:** stages burn only the fuel in the parts they drop; no fuel lines/crossfeed rules, solid boosters (and Making History SRBs) not in `ENGINES`.
 - **Biome names** for landed craft.
 - **Deployed-science progress** (`DeployedScience` scenario: per-experiment generated/limit) in the digest and dashboard.

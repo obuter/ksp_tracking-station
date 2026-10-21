@@ -406,13 +406,14 @@ function renderSide() {
   const res = RES.filter(([k]) => v.resources[k] && v.resources[k][1] > 0);
   if (res.length) h += `<div class="sec"><h3>Resources</h3>${res.map(([k, l, c]) => bar(l, v.resources[k][0], v.resources[k][1], c)).join("")}</div>`;
 
-  const dv = Object.entries(v.dv_estimate_ms || {});
+  const st = v.dv_stages || [];
   h += `<div class="sec"><h3>Propulsion & mass</h3><dl class="kv">
     <dt>Mass</dt><dd>${num(v.wet_mass_t, 2)} t <span class="dim">(${num(v.dry_mass_t, 2)} dry)</span></dd>
     <dt>Parts</dt><dd>${v.parts_count}</dd>
-    ${dv.map(([g, x]) => `<dt>Δv (${g})</dt><dd>${num(x)} m/s</dd>`).join("")}
+    ${st.length ? `<dt>Δv (vac)</dt><dd>${num(v.dv_total_ms)} m/s</dd>` : ""}
+    ${st.length > 1 ? st.map(s => `<dt>&nbsp; Stage ${s.stage} <span class="dim">${esc(s.engines.join(", "))}</span></dt><dd>${num(s.dv_ms)} m/s <span class="dim">· ${num(s.mass_t, 1)} t</span></dd>`).join("") : ""}
     </dl>${v.engines.length ? `<div class="tags" style="margin-top:6px">${[...new Set(v.engines)].map(e => `<span class="tag">${esc(e)} ×${v.engines.filter(x => x === e).length}</span>`).join("")}</div>` : ""}
-    ${dv.length > 1 ? `<div class="dim" style="font-size:11px;margin-top:4px">Each Δv assumes the other propellants are dead weight; staging ignored.</div>` : ""}</div>`;
+    ${st.length > 1 ? `<div class="dim" style="font-size:11px;margin-top:4px">Each stage burns the fuel in the parts it drops; start mass shown. Solid boosters ignored.</div>` : ""}</div>`;
 
   // comms
   const ants = [...new Set(v.antennas)];
@@ -458,7 +459,7 @@ function alerts() {
       right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: v ? vid(v) : null, k: a.time_until_s });
   }
   for (const c of D.contracts) if (c.state === "Active" && c.time_left_s != null && c.time_left_s < 30 * DAY)
-    out.push({ sev: c.time_left_s < 5 * DAY ? "bad" : "warn", icon: "✎", text: `Contract <b>${esc(c.type)}</b> deadline`, right: dur(c.time_left_s, true), k: c.time_left_s });
+    out.push({ sev: c.time_left_s < 5 * DAY ? "bad" : "warn", icon: "✎", text: `Contract <b>${esc(c.title || c.type)}</b> deadline`, right: dur(c.time_left_s, true), k: c.time_left_s });
   return out.sort((a, b) => a.k - b.k);
 }
 function rings() {
@@ -519,12 +520,14 @@ function renderTabs() {
       }).join("") + `</table><div class="dim" style="padding:8px 10px;font-size:11px">XP is estimated from flight logs; verify against the Astronaut Complex.</div>`;
   } else if (S.tab === "contracts") {
     const A = D.contracts.filter(c => c.state === "Active"), O = D.contracts.filter(c => c.state === "Offered");
-    h = `<div class="grid2">` + A.map(c => `<div class="box contract"><h4>${esc(c.type)}${c.target_body ? ` · <span class="dim">${esc(c.target_body)}</span>` : ""}</h4>
+    h = `<div class="grid2">` + A.map(c => `<div class="box contract"><h4>${esc(c.title || c.type)}${c.target_body ? ` · <span class="dim">${esc(c.target_body)}</span>` : ""}</h4>
         <div class="dim">${esc(c.agent)}</div>
         <div class="mono" style="margin-top:4px"><span class="good">√ ${num(c.funds_completion)}</span> · ${num(c.science, 1)} sci · ${num(c.rep_completion, 1)} rep · <span class="${c.time_left_s != null && c.time_left_s < 30 * DAY ? "warn" : "dim"}">${c.time_left_s != null ? dur(c.time_left_s, true) + " left" : "no deadline"}</span></div>
-        <ul>${c.params.map(p => `<li class="${p.state === "Complete" ? "done" : ""}">${esc(p.name)}${Object.entries(p).filter(([k]) => k !== "name" && k !== "state").map(([k, v]) => ` <span class="dim">${esc(k)}=${esc(v)}</span>`).join("")}</li>`).join("")}</ul></div>`).join("") + `</div>` +
+        <ul>${c.params.map(p => `<li class="${p.state === "Complete" ? "done" : ""}">${p.scanName
+          ? `${esc(p.scanName)} ≥${esc(p.coverage)}% <span class="dim">${esc(p.state)}</span>`
+          : esc(p.name) + Object.entries(p).filter(([k]) => k !== "name" && k !== "state").map(([k, v]) => ` <span class="dim">${esc(k)}=${esc(v)}</span>`).join("")}</li>`).join("")}</ul></div>`).join("") + `</div>` +
       `<table><tr><th>Offered</th><th>Body</th><th class="num">Advance</th><th class="num">Reward</th><th class="num">Sci</th><th class="num">Rep</th><th>Agent</th><th class="num">Expires</th></tr>` +
-      O.map(c => `<tr><td>${esc(c.type)}</td><td>${esc(c.target_body || "")}</td><td class="num">${num(c.funds_advance)}</td><td class="num good">${num(c.funds_completion)}</td><td class="num">${num(c.science, 1)}</td><td class="num">${num(c.rep_completion, 1)}</td><td class="dim">${esc(c.agent)}</td><td class="num dim">${c.time_left_s != null ? dur(c.time_left_s, true) : ""}</td></tr>`).join("") + `</table>`;
+      O.map(c => `<tr><td>${esc(c.title || c.type)}</td><td>${esc(c.target_body || "")}</td><td class="num">${num(c.funds_advance)}</td><td class="num good">${num(c.funds_completion)}</td><td class="num">${num(c.science, 1)}</td><td class="num">${num(c.rep_completion, 1)}</td><td class="dim">${esc(c.agent)}</td><td class="num dim">${c.time_left_s != null ? dur(c.time_left_s, true) : ""}</td></tr>`).join("") + `</table>`;
   } else if (S.tab === "network") {
     const rs = rings();
     h = `<table><tr><th>Body</th><th>Status</th><th>Relays (· altitude · phase angle; green = ring member)</th></tr>` + rs.map(r => {

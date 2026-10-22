@@ -534,17 +534,18 @@ def vessel(v, ut):
 
 
 def alarms(game, fs, ut):
-    """KSP Alarm Clock entries, with the vessel name resolved from its persistentId."""
-    names = {v.get("persistentId"): v.get("name") for v in fs.nodes("VESSEL")}
+    """KSP Alarm Clock entries, with the vessel (name and pid) resolved from its persistentId."""
+    by_id = {v.get("persistentId"): v for v in fs.nodes("VESSEL")}
     out = []
     for sc in game.nodes("SCENARIO"):
         if sc.get("name") != "AlarmClockScenario":
             continue
         al = sc.node("ALARMS")
         for a in al.nodes("ALARM") if al else []:
-            t = f(a.get("ut"))
+            t, v = f(a.get("ut")), by_id.get(a.get("vesselId"))
             out.append(dict(title=a.get("title"), type=(a.get("type") or "").replace("AlarmType", ""),
-                            description=a.get("description") or "", vessel=names.get(a.get("vesselId")),
+                            description=a.get("description") or "",
+                            vessel=v.get("name") if v else None, vessel_pid=v.get("pid") if v else None,
                             ut=t, date=ksp_date(t), time_until_s=t - ut,
                             triggered=a.get("triggered") == "True",
                             maneuver_ut=f(a.get("maneuverUT")) or None))

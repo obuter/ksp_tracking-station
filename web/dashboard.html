@@ -431,10 +431,10 @@ function renderSide() {
     h += `</div>`;
   }
 
-  const myAlarms = (D.alarms || []).filter(a => a.vessel === v.name || (a.title || "").toLowerCase().includes(v.name.toLowerCase()));
+  const myAlarms = (D.alarms || []).filter(a => a.vessel_pid === v.pid);
   if (myAlarms.length) h += `<div class="sec"><h3>Alarms</h3>${myAlarms.map(a => `<div class="card" style="border-left-color:var(--accent)">
       <div class="h"><span>⏰ ${esc(a.title)}</span><span class="t" style="color:var(--accent)">${a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s)}</span></div>
-      <div class="after">${kdate(a.ut)} · ${esc(a.type)}${a.description ? " · " + esc(a.description) : ""}</div></div>`).join("")}</div>`;
+      <div class="after">${kdate(a.ut)} · ${esc(alarmType(a.type))}${a.maneuver_ut ? ` · ${dur(a.maneuver_ut - a.ut, true)} before the burn` : ""}${a.description ? " · " + esc(a.description) : ""}</div></div>`).join("")}</div>`;
 
   h += `<div class="sec"><h3>${landed ? "Position" : "Orbit"}</h3>`;
   if (landed) h += `<dl class="kv"><dt>Body</dt><dd>${esc(o.body)}</dd><dt>Latitude</dt><dd>${num(v.lat, 3)}°</dd><dt>Longitude</dt><dd>${num(v.lon, 3)}°</dd><dt>Altitude</dt><dd>${num(v.alt)} m</dd>${v.landed_at ? `<dt>At</dt><dd>${esc(v.landed_at)}</dd>` : ""}</dl>`;
@@ -482,13 +482,18 @@ function renderSide() {
 }
 
 // ------------------------------------------------------------ tabs
+const alarmType = t => (t || "").replace(/([a-z])([A-Z])/g, (_, a, b) => a + " " + b.toLowerCase()); // TransferWindow -> Transfer window
 function alerts() {
-  const out = [];
+  const out = [], merged = new Set();
   for (const v of D.vessels) {
     if (MINOR.has(v.type)) continue;
     for (const m of v.maneuvers || []) {
-      if (m.time_until_s < 0) out.push({ sev: "bad", icon: "⚠", text: `<b>${esc(v.name)}</b> missed maneuver (${num(m.total, 1)} m/s)`, right: dur(-m.time_until_s, true) + " ago", id: vid(v), k: -1e12 });
-      else out.push({ sev: m.time_until_s < 7 * DAY ? "warn" : "info", icon: "◆", text: `<b>${esc(v.name)}</b> maneuver ${num(m.total, 1)} m/s @ ${kdate(m.ut)}`, right: "T− " + dur(m.time_until_s, true), id: vid(v), k: m.time_until_s });
+      // a maneuver alarm for this node joins the node's row instead of getting its own
+      const al = (D.alarms || []).find(a => !a.triggered && a.vessel_pid === v.pid && a.maneuver_ut && Math.abs(a.maneuver_ut - m.ut) < 1);
+      if (al) merged.add(al);
+      const tag = al ? ` <span class="sevinfo" title="${esc(al.title)}">⏰ ${dur(m.ut - al.ut, true)} before</span>` : m.time_until_s >= 0 ? ` <span class="dim">· no alarm</span>` : "";
+      if (m.time_until_s < 0) out.push({ sev: "bad", icon: "⚠", text: `<b>${esc(v.name)}</b> missed maneuver (${num(m.total, 1)} m/s)${tag}`, right: dur(-m.time_until_s, true) + " ago", id: vid(v), k: -1e12 });
+      else out.push({ sev: m.time_until_s < 7 * DAY ? "warn" : "info", icon: "◆", text: `<b>${esc(v.name)}</b> maneuver ${num(m.total, 1)} m/s @ ${kdate(m.ut)}${tag}`, right: "T− " + dur(m.time_until_s, true), id: vid(v), k: m.time_until_s });
     }
     const ec = v.resources.ElectricCharge;
     if (ec && ec[1] > 0 && ec[0] / ec[1] < 0.1) out.push({ sev: "bad", icon: "⚡", text: `<b>${esc(v.name)}</b> low electric charge`, right: `${num(ec[0] / ec[1] * 100)}%`, id: vid(v), k: -1e11 });
@@ -499,11 +504,10 @@ function alerts() {
     if (v.kerbin_relative?.in_kerbin_soi === false && v.kerbin_relative.distance_m < 1.2 * D.planets[1].soi) out.push({ sev: "warn", icon: "◎", text: `<b>${esc(v.name)}</b> near Kerbin SOI edge`, right: dist(v.kerbin_relative.distance_m), id: vid(v), k: -1e9 });
   }
   for (const a of D.alarms || []) {
-    if (a.triggered) continue;
-    const v = a.vessel && D.vessels.find(x => x.name === a.vessel);
+    if (a.triggered || merged.has(a)) continue;
     out.push({ sev: a.time_until_s < 0 ? "bad" : a.time_until_s < 7 * DAY ? "warn" : "info", icon: "⏰",
-      text: `Alarm <b>${esc(a.title)}</b>${a.vessel ? ` · ${esc(a.vessel)}` : ""} @ ${kdate(a.ut)}`,
-      right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: v ? vid(v) : null, k: a.time_until_s });
+      text: `Alarm <b>${esc(a.title)}</b> <span class="dim">(${esc(alarmType(a.type))})</span>${a.vessel ? ` · ${esc(a.vessel)}` : ""} @ ${kdate(a.ut)}`,
+      right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: a.vessel_pid, k: a.time_until_s });
   }
   for (const c of D.deployed_science || []) for (const e of c.experiments)
     if (e.stored > 0 && e.no_comms) out.push({ sev: "warn", icon: "⚗", text: `Deployed <b>${esc(e.name)}</b> (${esc(c.body)}): science waiting, no link`, right: num(e.stored, 1) + " sci", id: e.vessel_pid, k: -1e8 });

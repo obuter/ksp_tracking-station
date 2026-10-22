@@ -573,7 +573,6 @@ def deployed_science(game, fs):
                                      limit=round(f(e.get("ScienceLimit")), 1),
                                      transmitted=round(f(e.get("TransmittedScienceData")), 1),
                                      stored=round(f(e.get("StoredScienceData")), 1),
-                                     no_comms=e.get("noCommNetMsgPosted") == "True",
                                      no_power=e.get("noPowerMsgPosted") == "True"))
             out.append(dict(body=c.get("DeployedBody"), controller_pid=part_vessel.get(c.get("ControlModulePartId")),
                             experiments=exps))
@@ -729,7 +728,9 @@ def render(d, show_all):
     for c in d.get("deployed_science", []):
         for e in c["experiments"]:
             state = ("n/a" if not e["limit"] else "done" if e["generated"] >= e["limit"] else "on" if e["enabled"] else "off")
-            waiting = f"{e['stored']:g}" + (" (no link)" if e["no_comms"] and e["stored"] else "")
+            # noCommNetMsgPosted is a one-shot latch that stays True after the link returns, so judge by state:
+            # a connected experiment sends as it generates; stored data on a disconnected one is stranded
+            waiting = f"{e['stored']:g}" + (" (not sending)" if e["enabled"] else " (stranded)")
             rows.append((c["body"], e["name"], f"{e['generated']:g} / {e['limit']:g}", state,
                          f"{e['transmitted']:g}", waiting if e["stored"] else ""))
     if rows:

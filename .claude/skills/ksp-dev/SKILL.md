@@ -36,7 +36,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 - `vessels[]`: pid, name, type, situation, lat/lon/alt, crew, `orbit`{body, ref, SMA, ECC, INC, LAN, LPE, MNA, EPH, ap_alt, pe_alt, period_s}, resources{name:[cur,max]}, antennas, engines, `dv_stages[]`{stage, engines, dv_ms, mass_t} (vacuum, launch first), dv_total_ms, labs, lab_data, docking_ports, target, `maneuvers[]`{ut, date, time_until_s, prograde, normal, radial, total, after{orbit…, kerbin_relative_at_burn}}, `kerbin_relative` (Kerbol orbiters only), `asteroid`{size_class, tracked, lost_in_s} (SpaceObjects only)
 - `contracts[]`: type, state, agent, title (ContractConfigurator only), target_body, funds_*, science, rep_*, deadline_ut, time_left_s, params[]
 - `alarms[]`: title, type, description, vessel, vessel_pid, ut, date, time_until_s, triggered, maneuver_ut
-- `deployed_science[]`: body, controller_pid, `experiments[]`{name, vessel_pid, enabled, generated, limit, transmitted, stored, no_comms, no_power}
+- `deployed_science[]`: body, controller_pid, `experiments[]`{name, vessel_pid, enabled, generated, limit, transmitted, stored, no_power}
 - `planets[]`: idx, name, radius, GM, atm, parent, color, soi, orbit
 
 **Rule:** any schema change updates `render()` and the dashboard in the same change. Keep `digest.md` compact (it is @-mentioned into chats; target <350 lines; it grows ~6 lines per vessel).
@@ -55,7 +55,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 - Maneuvers after an SOI change are not predicted (current limitation).
 - A craft's `ORBIT` is in its current SOI's frame (`REF` = body index).
 - Asteroids/comets (`SpaceObject`): `DISCOVERY` `state` 1 = untracked (presence only), `size` 0–8 = class A–I; an untracked one is lost at `lastObservedTime + lifetime`. Their PART `mass` (150) is a placeholder.
-- `DeployedScience` scenario: SCIENCECLUSTER → MANNEDSCIENCEPARTS → MANNEDSCIENCEPART → EXPERIMENT. `VesselId` is the vessel `pid` with dashes; `ControlModulePartId` is a PART `persistentId`.
+- `DeployedScience` scenario: SCIENCECLUSTER → MANNEDSCIENCEPARTS → MANNEDSCIENCEPART → EXPERIMENT. `VesselId` is the vessel `pid` with dashes; `ControlModulePartId` is a PART `persistentId`. `noCommNetMsgPosted` is a latch that stays True after the link returns; don't use it for link state. A connected (`Enabled`) experiment sends as it generates, so stored > 0 on one means no link.
 
 ## Workflow
 

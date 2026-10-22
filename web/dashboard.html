@@ -489,7 +489,8 @@ function deployedRow(e) {
   const done = e.limit > 0 && e.generated >= e.limit;
   const state = !e.limit ? `<span class="dim">no science here</span>` : done ? `<span class="good">✓ done</span>` : e.enabled ? "" : `<span class="dim">off</span>`;
   const notes = [`sent ${num(e.transmitted, 1)}`];
-  if (e.stored > 0) notes.push(`<span class="${e.no_comms ? "bad" : "warn"}">${num(e.stored, 1)} waiting${e.no_comms ? " — no link" : ""}</span>`);
+  if (e.stored > 0) notes.push(e.enabled ? `<span class="bad">${num(e.stored, 1)} waiting — not sending</span>`
+    : `<span class="dim">${num(e.stored, 1)} stranded — experiment not connected</span>`);
   if (e.no_power && !done) notes.push(`<span class="warn">no power</span>`);
   return `<div style="margin:6px 0 2px">${esc(e.name)} ${state}</div>${bar("Sci", e.generated, e.limit, "var(--accent)", false)}
     <div class="dim" style="font-size:11px">${notes.join(" · ")}</div>`;
@@ -598,7 +599,8 @@ function alerts() {
       right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: a.vessel_pid, k: a.time_until_s, key: `alarm:${a.title}:${Math.round(a.ut)}` });
   }
   for (const c of D.deployed_science || []) for (const e of c.experiments)
-    if (e.stored > 0 && e.no_comms) out.push({ sev: "warn", icon: "⚗", text: `Deployed <b>${esc(e.name)}</b> (${esc(c.body)}): science waiting, no link`, right: num(e.stored, 1) + " sci", id: e.vessel_pid, k: -1e8, key: `dsci:${e.vessel_pid}:${e.name}` });
+    // connected experiments send as they generate, so stored data on one means no link (not the save's stale no-comm flag)
+    if (e.stored > 0 && e.enabled) out.push({ sev: "warn", icon: "⚗", text: `Deployed <b>${esc(e.name)}</b> (${esc(c.body)}): science waiting, not sending`, right: num(e.stored, 1) + " sci", id: e.vessel_pid, k: -1e8, key: `dsci:${e.vessel_pid}:${e.name}` });
   for (const c of D.contracts) if (c.state === "Active" && c.time_left_s != null && c.time_left_s < 30 * DAY)
     out.push({ sev: c.time_left_s < 5 * DAY ? "bad" : "warn", icon: "✎", text: `Contract <b>${esc(c.title || c.type)}</b> deadline`, right: dur(c.time_left_s, true), tab: "contracts", k: c.time_left_s, key: `contract:${c.title || c.type}:${Math.round(c.deadline_ut)}` });
   return out.sort((a, b) => a.k - b.k);

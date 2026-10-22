@@ -525,6 +525,11 @@ def vessel(v, ut):
     out["maneuvers"] = maneuvers(v, orb, ut)
     tgt = v.node("TARGET")
     out["target"] = tgt.get("tgtId") or tgt.get("vesselId") if tgt else None
+    disc = v.node("DISCOVERY")
+    if v.get("type") == "SpaceObject" and disc:
+        size, tracked = int(f(disc.get("size"))), int(f(disc.get("state"))) > 1  # state 1 = presence only (untracked)
+        out["asteroid"] = dict(size_class="ABCDEFGHI"[size] if 0 <= size < 9 else "?", tracked=tracked,
+                               lost_in_s=None if tracked else f(disc.get("lastObservedTime")) + f(disc.get("lifetime")) - ut)
     return out
 
 
@@ -544,6 +549,34 @@ def alarms(game, fs, ut):
                             triggered=a.get("triggered") == "True",
                             maneuver_ut=f(a.get("maneuverUT")) or None))
     return sorted(out, key=lambda a: a["ut"])
+
+
+def deployed_science(game, fs):
+    """Breaking Ground experiments per body: science generated vs its limit, and data waiting to be sent."""
+    names = {v.get("pid"): v.get("name") for v in fs.nodes("VESSEL")}
+    part_vessel = {p.get("persistentId"): v.get("pid") for v in fs.nodes("VESSEL") for p in v.nodes("PART")}
+    out = []
+    for sc in game.nodes("SCENARIO"):
+        if sc.get("name") != "DeployedScience":
+            continue
+        clusters = sc.node("SCIENCECLUSTERS")
+        for c in clusters.nodes("SCIENCECLUSTER") if clusters else []:
+            parts = c.node("MANNEDSCIENCEPARTS")
+            exps = []
+            for mp in parts.nodes("MANNEDSCIENCEPART") if parts else []:
+                for e in mp.nodes("EXPERIMENT"):
+                    pid = (e.get("VesselId") or "").replace("-", "")  # experiment part's vessel pid
+                    exps.append(dict(name=names.get(pid) or e.get("ExperimentId"), vessel_pid=pid,
+                                     enabled=mp.get("Enabled") == "True",
+                                     generated=round(f(e.get("TotalScienceGenerated")), 1),
+                                     limit=round(f(e.get("ScienceLimit")), 1),
+                                     transmitted=round(f(e.get("TransmittedScienceData")), 1),
+                                     stored=round(f(e.get("StoredScienceData")), 1),
+                                     no_comms=e.get("noCommNetMsgPosted") == "True",
+                                     no_power=e.get("noPowerMsgPosted") == "True"))
+            out.append(dict(body=c.get("DeployedBody"), controller_pid=part_vessel.get(c.get("ControlModulePartId")),
+                            experiments=exps))
+    return out
 
 
 def contracts(game, ut):
@@ -643,6 +676,10 @@ def render(d, show_all):
             elif o:
                 L.append(f"- Ap {dist(o['ap_alt'])} · Pe {dist(o['pe_alt'])} · inc {o['INC']:.2f}° · "
                          f"ecc {o['ECC']:.5f} · period {ksp_dur(o['period_s'])}")
+            ast = v.get("asteroid")
+            if ast:
+                L.append(f"- Class {ast['size_class']}, " + ("tracked" if ast["tracked"]
+                         else f"untracked: signal lost in {ksp_dur(ast['lost_in_s'])}"))
             kr = v.get("kerbin_relative")
             if kr:
                 L.append(f"- vs Kerbin: {kr['phase_deg']:+.2f}° ({'ahead' if kr['phase_deg'] > 0 else 'behind'}), "
@@ -686,6 +723,17 @@ def render(d, show_all):
                 else:
                     L.append("  - after: (not predicted — escape/hyperbolic or follows an SOI change)")
             L.append("")
+
+    rows = []
+    for c in d.get("deployed_science", []):
+        for e in c["experiments"]:
+            state = ("n/a" if not e["limit"] else "done" if e["generated"] >= e["limit"] else "on" if e["enabled"] else "off")
+            waiting = f"{e['stored']:g}" + (" (no link)" if e["no_comms"] and e["stored"] else "")
+            rows.append((c["body"], e["name"], f"{e['generated']:g} / {e['limit']:g}", state,
+                         f"{e['transmitted']:g}", waiting if e["stored"] else ""))
+    if rows:
+        L += ["## Deployed science", ""]
+        L += md_table(["Body", "Experiment", "Generated / limit", "State", "Sent", "Waiting"], rows) + [""]
 
     if d.get("alarms"):
         L += ["## Alarm clock", ""]
@@ -770,6 +818,7 @@ def build(save, show_all):
         vessels=vessels,
         contracts=contracts(game, ut),
         alarms=alarms(game, fs, ut),
+        deployed_science=deployed_science(game, fs),
         planets=planets(),
     )
 

@@ -364,7 +364,7 @@ function renderList() {
       if (v.maneuvers?.length) badges.push(`<span class="badge mnv">MNV</span>`);
       html += `<div class="vrow ${moon ? "moon" : ""} ${S.sel === vid(v) ? "sel" : ""}" data-id="${esc(vid(v))}">
         <span class="ico" style="background:${TYPE_COLOR[v.type] || "#aaa"}"></span>
-        <span class="nm" title="${esc(v.name)}">${esc(v.name)}<br><span class="sit">${esc(v.type)} · ${esc(v.situation)}</span></span>${badges.join("")}</div>`;
+        <span class="nm" title="${esc(v.name)}">${esc(v.name)}<br><span class="sit">${v.asteroid ? asteroidLine(v.asteroid) : `${esc(v.type)} · ${esc(v.situation)}`}</span></span>${badges.join("")}</div>`;
     }
   }
   $("vlist").innerHTML = html || `<div class="empty">No vessels match.</div>`;
@@ -372,9 +372,10 @@ function renderList() {
 
 // ------------------------------------------------------------ side panel
 function selected() { return D.vessels.find(v => vid(v) === S.sel) || null; }
-function bar(label, cur, max, color) {
+function asteroidLine(a) { return `Class ${esc(a.size_class)} · ${a.tracked ? "tracked" : "lost in " + dur(a.lost_in_s, true)}`; }
+function bar(label, cur, max, color, lowIsBad = true) {
   const pct = max > 0 ? Math.max(0, Math.min(100, cur / max * 100)) : 0;
-  const c = pct < 10 ? "var(--bad)" : color;
+  const c = lowIsBad && pct < 10 ? "var(--bad)" : color;
   return `<div class="bar"><span>${label}</span><div class="t"><div class="f" style="width:${pct}%;background:${c}"></div></div><span class="n">${num(cur, cur < 100 ? 1 : 0)} / ${num(max)}</span></div>`;
 }
 function orbitKV(o) {
@@ -395,6 +396,15 @@ function kerbinBox(kr, title) {
     <dt>Radial offset</dt><dd>${dist(kr.radial_offset_m)}</dd>
     <dt>Period diff</dt><dd class="${dc}">${drift > 0 ? "+" : ""}${num(drift)} s</dd>
     <dt>Drift</dt><dd class="${dc}">${perYear > 0 ? "+" : ""}${num(perYear, 2)}° / yr (${dist(Math.abs(perYear) * Math.PI / 180 * k.orbit.SMA)}/yr)</dd></dl></div>`;
+}
+function deployedRow(e) {
+  const done = e.limit > 0 && e.generated >= e.limit;
+  const state = !e.limit ? `<span class="dim">no science here</span>` : done ? `<span class="good">✓ done</span>` : e.enabled ? "" : `<span class="dim">off</span>`;
+  const notes = [`sent ${num(e.transmitted, 1)}`];
+  if (e.stored > 0) notes.push(`<span class="${e.no_comms ? "bad" : "warn"}">${num(e.stored, 1)} waiting${e.no_comms ? " — no link" : ""}</span>`);
+  if (e.no_power && !done) notes.push(`<span class="warn">no power</span>`);
+  return `<div style="margin:6px 0 2px">${esc(e.name)} ${state}</div>${bar("Sci", e.generated, e.limit, "var(--accent)", false)}
+    <div class="dim" style="font-size:11px">${notes.join(" · ")}</div>`;
 }
 function renderSide() {
   const v = selected();
@@ -431,12 +441,19 @@ function renderSide() {
   else if (fin(o.SMA)) h += orbitKV(o);
   h += `</div>`;
   if (v.kerbin_relative) h += `<div class="sec"><h3>Relative to Kerbin</h3>${kerbinBox(v.kerbin_relative, "Phase")}</div>`;
+  const ast = v.asteroid;
+  if (ast) h += `<div class="sec"><h3>Asteroid</h3><dl class="kv"><dt>Class</dt><dd>${esc(ast.size_class)}</dd>
+    <dt>Tracking</dt><dd>${ast.tracked ? "tracked" : `<span class="warn">untracked</span>`}</dd>
+    ${ast.tracked ? "" : `<dt>Signal lost in</dt><dd title="${kdate(ut + ast.lost_in_s)}">${dur(ast.lost_in_s, true)}</dd>`}</dl></div>`;
+  // a control station shows its whole cluster, an experiment part only itself
+  const ds = (D.deployed_science || []).flatMap(c => c.controller_pid === v.pid ? c.experiments : c.experiments.filter(e => e.vessel_pid === v.pid));
+  if (ds.length) h += `<div class="sec"><h3>Deployed science</h3>${ds.map(deployedRow).join("")}</div>`;
 
   const res = RES.filter(([k]) => v.resources[k] && v.resources[k][1] > 0);
   if (res.length) h += `<div class="sec"><h3>Resources</h3>${res.map(([k, l, c]) => bar(l, v.resources[k][0], v.resources[k][1], c)).join("")}</div>`;
 
-  const st = v.dv_stages || [];
-  h += `<div class="sec"><h3>Propulsion & mass</h3><dl class="kv">
+  const st = v.dv_stages || [], minor = MINOR.has(v.type);
+  if (!ast && !(minor && landed)) h += `<div class="sec"><h3>Propulsion & mass</h3><dl class="kv">
     <dt>Mass</dt><dd>${num(v.wet_mass_t, 2)} t <span class="dim">(${num(v.dry_mass_t, 2)} dry)</span></dd>
     <dt>Parts</dt><dd>${v.parts_count}</dd>
     ${st.length ? `<dt>Δv (vac)</dt><dd>${num(v.dv_total_ms)} m/s</dd>` : ""}
@@ -445,6 +462,7 @@ function renderSide() {
     ${st.length > 1 ? `<div class="dim" style="font-size:11px;margin-top:4px">Each stage burns the fuel in the parts it drops; start mass shown. Solid boosters ignored.</div>` : ""}</div>`;
 
   // comms
+  if (minor) { $("side").innerHTML = h; return; }
   const ants = [...new Set(v.antennas)];
   const dk = distToKerbin(v);
   let comm = ants.map(a => {
@@ -487,6 +505,8 @@ function alerts() {
       text: `Alarm <b>${esc(a.title)}</b>${a.vessel ? ` · ${esc(a.vessel)}` : ""} @ ${kdate(a.ut)}`,
       right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: v ? vid(v) : null, k: a.time_until_s });
   }
+  for (const c of D.deployed_science || []) for (const e of c.experiments)
+    if (e.stored > 0 && e.no_comms) out.push({ sev: "warn", icon: "⚗", text: `Deployed <b>${esc(e.name)}</b> (${esc(c.body)}): science waiting, no link`, right: num(e.stored, 1) + " sci", id: e.vessel_pid, k: -1e8 });
   for (const c of D.contracts) if (c.state === "Active" && c.time_left_s != null && c.time_left_s < 30 * DAY)
     out.push({ sev: c.time_left_s < 5 * DAY ? "bad" : "warn", icon: "✎", text: `Contract <b>${esc(c.title || c.type)}</b> deadline`, right: dur(c.time_left_s, true), k: c.time_left_s });
   return out.sort((a, b) => a.k - b.k);

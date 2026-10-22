@@ -111,7 +111,7 @@ canvas.drag { cursor: grabbing; }
 table { border-collapse: collapse; width: 100%; }
 th { text-align: left; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); font-weight: 600; padding: 6px 10px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); }
 td { padding: 4px 10px; border-bottom: 1px solid #142130; vertical-align: top; }
-tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel2); }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel2); } tr.sel td { background: #12324a; }
 .num { font-family: var(--mono); text-align: right; }
 .pips { display: inline-flex; gap: 2px; }
 .pips i { width: 8px; height: 8px; border-radius: 1px; background: var(--line2); }
@@ -268,6 +268,18 @@ function vesselLocal(v, t) {
   const o = v.orbit; if (!o || !fin(o.SMA) || o.SMA === 0) return null;
   const b = D.planets[o.ref]; if (!b) return null;
   return posAt(o, t, b.GM);
+}
+function transferWindow(i) { // Hohmann transfer window from Kerbin to planet i, as of the save
+  const b = D.planets[i], GM = D.planets[0].GM, ut = D.header.ut;
+  if (b.parent !== 0 || i === 1) return null;
+  const r1 = D.planets[1].orbit.SMA, r2 = b.orbit.SMA, wrap = x => ((x % 360) + 540) % 360 - 180;
+  const ideal = 180 * (1 - ((r1 + r2) / (2 * r2)) ** 1.5); // target's lead over Kerbin at departure, deg
+  const p = helioPos(i, ut), q = helioPos(1, ut);
+  const now = (Math.atan2(p[1], p[0]) - Math.atan2(q[1], q[0])) * 180 / Math.PI;
+  const rate = 180 / Math.PI * (Math.sqrt(GM / r2 ** 3) - Math.sqrt(GM / r1 ** 3)); // phase change, deg/s
+  const togo = (((ideal - now) * Math.sign(rate)) % 360 + 360) % 360;
+  return { now: wrap(now), ideal: wrap(ideal), wait: togo / Math.abs(rate),
+    trip: Math.PI * Math.sqrt(((r1 + r2) / 2) ** 3 / GM), approx: b.orbit.ECC > 0.1 };
 }
 function distToKerbin(v) {
   const t = D.header.ut, o = v.orbit; if (!o || o.ref == null) return null;
@@ -541,14 +553,20 @@ function renderTabs() {
     }).join("") + `</table><div class="dim" style="padding:8px 10px;font-size:11px">Ring ✓ = ≥3 relays at the same altitude (±2%), ≥90° apart, ring altitude above the body radius. DSN = 250 G (Tracking Station L3).</div>`;
   } else if (S.tab === "bodies") {
     const ut = D.header.ut, k = helioPos(1, ut);
-    h = `<table><tr><th>Body</th><th>Parent</th><th class="num">Radius</th><th class="num">Atmosphere</th><th class="num">SOI</th><th class="num">Distance to Kerbin now</th><th class="num">Vessels</th></tr>` +
+    h = `<table><tr><th>Body</th><th class="num">Radius</th><th class="num">Atmosphere</th><th class="num">Surface g</th><th class="num">SOI</th><th class="num">Distance to Kerbin now</th><th class="num">Vessels</th>
+      <th class="num">Phase now → ideal</th><th class="num">Next window</th><th class="num">Trip</th></tr>` +
       BODY_ORDER.map(i => {
         const b = D.planets[i], p = helioPos(i, ut), d = i === 1 ? 0 : Math.hypot(p[0] - k[0], p[1] - k[1], p[2] - k[2]);
-        const n = D.vessels.filter(v => v.orbit?.ref === i && !MINOR.has(v.type)).length;
-        return `<tr class="click" data-body="${i}"><td><span style="color:${b.color}">●</span> <b>${esc(b.name)}</b></td><td class="dim">${b.parent == null ? "" : esc(bodyName(b.parent))}</td>
-          <td class="num">${dist(b.radius)}</td><td class="num">${b.atm ? dist(b.atm) : "—"}</td><td class="num">${b.soi ? dist(b.soi) : "—"}</td>
-          <td class="num">${i === 1 ? "—" : dist(d)}</td><td class="num">${n || ""}</td></tr>`;
-      }).join("") + `</table>`;
+        const mine = D.vessels.filter(v => v.orbit?.ref === i && !MINOR.has(v.type));
+        const landed = mine.filter(v => ["LANDED", "SPLASHED", "PRELAUNCH"].includes(v.situation)).length;
+        const moon = b.parent != null && b.parent !== 0, w = transferWindow(i);
+        return `<tr class="click ${i === focusBody() ? "sel" : ""}" data-body="${i}"><td style="padding-left:${moon ? 28 : 10}px"><span style="color:${b.color}">●</span> <b>${esc(b.name)}</b></td>
+          <td class="num">${dist(b.radius)}</td><td class="num">${b.atm ? dist(b.atm) : "—"}</td><td class="num">${num(b.GM / b.radius ** 2 / 9.80665, 2)} g</td><td class="num">${b.soi ? dist(b.soi) : "—"}</td>
+          <td class="num">${i === 1 ? "—" : dist(d)}</td><td class="num">${mine.length - landed || ""}${landed ? ` <span class="dim">+${landed} landed</span>` : ""}</td>
+          ${w ? `<td class="num">${num(w.now, 1)}° → ${num(w.ideal, 1)}°</td>
+            <td class="num ${w.wait < 10 * DAY ? "good" : ""}" title="${kdate(ut + w.wait)}">${w.approx ? "≈ " : ""}${dur(w.wait, true)}</td><td class="num dim">${dur(w.trip, true)}</td>`
+            : `<td></td><td></td><td></td>`}</tr>`;
+      }).join("") + `</table><div class="dim" style="padding:8px 10px;font-size:11px">Windows: Hohmann transfer from Kerbin, as of the last save (hover for the date). ≈ = eccentric orbit, so check a transfer planner.</div>`;
   }
   $("tabbody").innerHTML = h;
 }
@@ -721,6 +739,7 @@ function select(id, fromList) {
 function renderFocus() {
   $("focus").innerHTML = BODY_ORDER.map(i => `<option value="${i}" ${i === focusBody() ? "selected" : ""}>${D.planets[i].parent && D.planets[i].parent !== 0 ? "  └ " : ""}${D.planets[i].name}</option>`).join("");
   $("btnUp").disabled = focusBody() === 0;
+  if (S.tab === "bodies") renderTabs(); // highlights the focused body
 }
 $("focus").addEventListener("change", e => setFocus(+e.target.value));
 $("btnFit").addEventListener("click", () => { fitView(); drawMap(); });

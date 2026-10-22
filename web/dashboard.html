@@ -31,13 +31,22 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .stat b { font-family: var(--mono); font-size: 15px; display: block; }
 .stat span { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
 .funds b { color: var(--good); } .sci b { color: var(--accent); } .rep b { color: var(--mag); }
-.facs { display: flex; gap: 4px; flex-wrap: wrap; max-width: 520px; }
+.facs { display: flex; flex-wrap: wrap; gap: 4px; flex: 0 1000 auto; min-width: 0; max-height: 18px; overflow: hidden; } /* chips that don't fit wrap out of sight */
+.next { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 140px; max-width: 520px; padding: 3px 10px; background: var(--panel2); border: 1px solid var(--line2); border-left: 3px solid var(--accent); border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.next:hover { background: #142130; }
+.next[data-sev=bad] { border-left-color: var(--bad); } .next[data-sev=warn] { border-left-color: var(--warn); }
+.next[data-sev=ok] { border-left-color: var(--good); cursor: default; }
+.next .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.next small { display: block; font-size: 10px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.stat .delta { font-style: normal; font-family: var(--mono); letter-spacing: 0; text-transform: none; margin-left: 4px; }
 .chip { font-size: 10px; padding: 1px 6px; border: 1px solid var(--line2); border-radius: 10px; color: var(--dim); white-space: nowrap; }
 .chip.l3 { color: var(--good); border-color: #2c5c40; } .chip.l2 { color: var(--warn); border-color: #5c4a2c; }
 .age { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--dim); white-space: nowrap; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); }
 .dot.stale { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
 .dot.dead { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+.dot.pulse { animation: pulse 1.4s ease-out 3; } /* a new save just arrived */
+@keyframes pulse { from { box-shadow: 0 0 0 0 rgba(95,211,141,.8); } to { box-shadow: 0 0 0 12px rgba(95,211,141,0); } }
 
 /* list */
 .listhead { padding: 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
@@ -45,11 +54,13 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .filters { display: flex; flex-wrap: wrap; gap: 4px; }
 .filters button { font: inherit; font-size: 10px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line2); background: transparent; color: var(--faint); cursor: pointer; }
 .filters button.on { color: var(--text); border-color: var(--accent); }
-.vlist { overflow-y: auto; flex: 1; padding-bottom: 20px; }
+.vlist { overflow-y: auto; flex: 1; min-height: 0; padding-bottom: 20px; }
 .bodyhdr { padding: 6px 10px 3px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); cursor: pointer; display: flex; align-items: center; gap: 6px; position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .bodyhdr:hover { color: var(--text); }
 .bodyhdr.moon { padding-left: 22px; }
 .bodyhdr i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.chev { width: 14px; margin-left: -4px; text-align: center; font-size: 12px; color: var(--dim); }
+.chev:hover { color: var(--accent); }
 .vrow { padding: 4px 10px 4px 14px; display: flex; align-items: center; gap: 7px; cursor: pointer; border-left: 2px solid transparent; }
 .vrow.moon { padding-left: 28px; }
 .vrow:hover { background: var(--panel2); }
@@ -63,17 +74,17 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .badge.lab { color: var(--accent); border-color: #1e4a63; }
 
 /* map */
-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 canvas.drag { cursor: grabbing; }
-.mapbar { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.mapbar { position: absolute; top: 8px; left: 8px; max-width: calc(100% - 250px); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .mapbar select, .mapbar button { font: inherit; font-size: 11px; background: rgba(13,20,28,.9); color: var(--text); border: 1px solid var(--line2); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
 .mapbar button:hover { border-color: var(--accent); }
 .mapinfo { position: absolute; bottom: 8px; left: 8px; font-size: 11px; color: var(--dim); font-family: var(--mono); background: rgba(4,7,10,.7); padding: 2px 6px; border-radius: 3px; }
-.legend { position: absolute; bottom: 8px; right: 8px; font-size: 10px; color: var(--dim); background: rgba(4,7,10,.7); padding: 4px 8px; border-radius: 3px; display: flex; gap: 10px; }
+.legend { position: absolute; top: 8px; right: 8px; font-size: 10px; color: var(--dim); background: rgba(4,7,10,.7); padding: 4px 8px; border-radius: 3px; display: flex; gap: 10px; }
 .legend span::before { content: ""; display: inline-block; width: 14px; border-top: 2px solid; margin-right: 4px; vertical-align: middle; }
 .legend .cur::before { border-color: var(--accent); }
 .legend .plan::before { border-color: var(--warn); border-top-style: dashed; }
-.tip { position: absolute; pointer-events: none; background: rgba(13,20,28,.95); border: 1px solid var(--line2); padding: 3px 7px; border-radius: 3px; font-size: 11px; display: none; white-space: nowrap; }
+.tip { position: absolute; pointer-events: none; background: rgba(13,20,28,.95); border: 1px solid var(--line2); padding: 3px 7px; border-radius: 3px; font-size: 11px; line-height: 1.5; display: none; white-space: nowrap; }
 
 /* side */
 .sec { padding: 10px 14px; border-bottom: 1px solid var(--line); }
@@ -91,7 +102,7 @@ canvas.drag { cursor: grabbing; }
 .tag.relay { border-color: #1e4a63; color: var(--accent); }
 .card { background: var(--panel2); border: 1px solid var(--line2); border-left: 3px solid var(--warn); border-radius: 4px; padding: 8px 10px; margin-top: 6px; }
 .card.missed { border-left-color: var(--bad); }
-.card .h { display: flex; justify-content: space-between; font-weight: 600; }
+.card .h { display: flex; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap; font-weight: 600; }
 .card .t { font-family: var(--mono); color: var(--warn); }
 .card.missed .t { color: var(--bad); }
 .card .dv { font-family: var(--mono); font-size: 12px; margin: 4px 0; }
@@ -107,7 +118,7 @@ canvas.drag { cursor: grabbing; }
 .tabbar button.on { color: var(--text); border-bottom-color: var(--accent); }
 .tabbar button .cnt { font-size: 10px; margin-left: 4px; padding: 0 5px; border-radius: 8px; background: var(--panel2); }
 .tabbar button .cnt.hot { background: #5c2a2a; color: #ffbaba; }
-.tabbody { overflow: auto; flex: 1; padding: 0 0 10px; }
+.tabbody { overflow: auto; flex: 1; min-height: 0; padding: 0 0 10px; }
 table { border-collapse: collapse; width: 100%; }
 th { text-align: left; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); font-weight: 600; padding: 6px 10px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); }
 td { padding: 4px 10px; border-bottom: 1px solid #142130; vertical-align: top; }
@@ -118,20 +129,72 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel2); } t
 .pips i.on { background: var(--warn); }
 .xpbar { width: 80px; height: 5px; background: var(--line); border-radius: 3px; display: inline-block; vertical-align: middle; overflow: hidden; }
 .xpbar i { display: block; height: 100%; background: var(--accent); }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; padding: 10px; }
+.nw { white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 10px; padding: 10px; }
 .contract h4 { margin: 0 0 4px; font-size: 13px; }
 .contract ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; }
 .contract li::before { content: "☐ "; color: var(--faint); }
 .contract li.done::before { content: "☑ "; color: var(--good); }
-.alert { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #142130; align-items: center; cursor: pointer; }
+.alert { display: grid; grid-template-columns: 22px 1fr auto 18px; gap: 8px; padding: 6px 12px; border-bottom: 1px solid #142130; align-items: center; cursor: pointer; }
 .alert:hover { background: var(--panel2); }
+.alert.muted { opacity: .45; }
+.mute { font: inherit; font-size: 15px; line-height: 1; background: none; border: none; color: var(--faint); cursor: pointer; padding: 0; }
+.mute:hover { color: var(--text); }
+.mutedbar { padding: 6px 12px; font-size: 11px; color: var(--faint); cursor: pointer; border-bottom: 1px solid #142130; }
+.mutedbar:hover { color: var(--text); }
 .sevbad { color: var(--bad); } .sevwarn { color: var(--warn); } .sevinfo { color: var(--accent); }
 .nodata { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--bg); z-index: 10; text-align: center; color: var(--dim); }
 .nodata code { color: var(--accent); }
+
+/* help overlay */
+.help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+.help[hidden] { display: none; }
+.helpbox { position: relative; background: var(--panel); border: 1px solid var(--line2); border-radius: 6px; padding: 16px 20px; width: 100%; max-width: 580px; max-height: 90vh; overflow: auto; }
+.helpbox h3 { margin: 0 0 12px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.helpbox dl { display: grid; grid-template-columns: 110px 1fr; gap: 7px 14px; margin: 0; }
+.helpbox dt { color: var(--dim); } .helpbox dd { margin: 0; }
+.helpbox p { color: var(--dim); font-size: 11px; margin: 14px 0 0; }
+.helpbox .x { position: absolute; top: 8px; right: 12px; font: inherit; font-size: 18px; background: none; border: none; color: var(--dim); cursor: pointer; }
+kbd { font-family: var(--mono); font-size: 11px; padding: 0 5px; border: 1px solid var(--line2); border-radius: 3px; background: var(--panel2); }
+
+/* smaller screens: narrower side columns */
+@media (max-width: 1400px) {
+  .app { grid-template-columns: 250px 1fr 340px; grid-template-rows: 52px 1fr 34vh; }
+  .facs { display: none; } /* no room; the list stays in the title tooltip */
+}
+/* phones and tablets: one scrolling column */
+@media (max-width: 1000px) {
+  html, body { height: auto; overflow: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 58vh auto auto auto;
+    grid-template-areas: "top" "map" "side" "tabs" "list"; }
+  .top { flex-wrap: wrap; gap: 8px 16px; padding: 8px 12px; }
+  .facs { display: none; }
+  .age { margin-left: 0; }
+  .next { order: 10; flex-basis: 100%; max-width: none; }
+  .side { overflow: visible; }
+  .tabs { max-height: 75vh; }
+  .tabbar { overflow-x: auto; }
+  .list { max-height: 75vh; }
+  .mapbar { max-width: calc(100% - 16px); }
+  .legend { display: none; }
+}
 </style>
 </head>
 <body>
 <div class="nodata" id="nodata"><div><h2>No data yet</h2><p>Run <code>python3 tools/ksp_digest.py --serve</code> from the repo root<br>and open <code>http://localhost:8765/web/dashboard.html</code>. The page reloads <code>data/digest.js</code> every 5 s.</p></div></div>
+<div class="help" id="help" hidden><div class="helpbox">
+  <button class="x" title="Close  ( Esc )">×</button>
+  <h3>Controls</h3>
+  <dl>
+    <dt>Map</dt><dd>Drag to pan · scroll or pinch to zoom · click a craft to select it · click a planet or moon to focus on it</dd>
+    <dt>Map buttons</dt><dd><b>Fit</b> frames everything · <b>Zoom to selected</b> · <b>▲ Parent</b> goes up one level</dd>
+    <dt>Vessel list</dt><dd>Click a craft to select it · click a body name to focus the map · ▾ / ▸ collapses a group</dd>
+    <dt>Type chips</dt><dd>Click to show or hide a type · double-click to show only that type</dd>
+    <dt>Search</dt><dd><kbd>/</kbd> focuses · <kbd>Enter</kbd> selects the first match · <kbd>Esc</kbd> clears</dd>
+    <dt>Alerts</dt><dd>Click to jump to the craft · <b>×</b> mutes an alert until its condition clears</dd>
+  </dl>
+  <p>Data reloads every 5 s. Times and positions are as of the last save: KSP writes it on quicksave, autosave and scene changes. <kbd>?</kbd> opens this panel.</p>
+</div></div>
 <div class="app">
   <header class="top" id="top"></header>
   <aside class="list">
@@ -148,6 +211,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel2); } t
       <button id="btnFit" title="Fit everything in view">Fit</button>
       <button id="btnSel" title="Zoom to selected vessel">Zoom to selected</button>
       <button id="btnUp" title="Go to parent body">▲ Parent</button>
+      <button id="btnHelp" title="Controls  ( ? )">?</button>
     </div>
     <div class="mapinfo" id="mapinfo"></div>
     <div class="legend"><span class="cur">current orbit</span><span class="plan">after planned maneuvers</span></div>
@@ -179,6 +243,7 @@ const XP_LEVELS = [0, 2, 8, 16, 32, 64];
 
 // ------------------------------------------------------------ state
 let D = null, lastGen = null, offline = false;
+let ALERTS = [], DELTA = {}; // alerts of the current save; career change since the previous save
 const store = {
   get(k, d) { try { const v = localStorage.getItem("ksp-ts:" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("ksp-ts:" + k, JSON.stringify(v)); } catch {} },
@@ -187,6 +252,7 @@ const S = {
   sel: store.get("sel", null), focus: store.get("focus", null), tab: store.get("tab", "alerts"),
   // "Minor" was the old single debris chip: expand it to the split chips
   filters: new Set(store.get("filters", FILTER_TYPES.filter(t => !(t in MISC_KEYS))).flatMap(t => t === "Minor" ? Object.keys(MISC_KEYS) : [t])), q: "",
+  muted: new Set(store.get("muted", [])), collapsed: new Set(store.get("collapsed", [])), showMuted: false,
   view: null, // {cx, cy, scale}
 };
 
@@ -297,31 +363,51 @@ function load() {
   s.src = "../data/digest.js?t=" + Date.now();
   s.onload = () => {
     s.remove(); offline = false;
-    if (window.DIGEST && window.DIGEST.header.generated_at !== lastGen) { D = window.DIGEST; lastGen = D.header.generated_at; renderAll(); }
+    if (window.DIGEST && window.DIGEST.header.generated_at !== lastGen) {
+      const prev = D; D = window.DIGEST; lastGen = D.header.generated_at;
+      if (prev) DELTA = Object.fromEntries(["funds", "science", "reputation"].map(k => [k, D.career[k] - prev.career[k]]));
+      renderAll(!!prev);
+    }
   };
   s.onerror = () => { s.remove(); offline = true; if (!D) $("nodata").style.display = "flex"; };
   document.head.appendChild(s);
 }
 setInterval(load, 5000);
-setInterval(() => D && renderTop(), 1000);
+setInterval(() => D && renderAge(), 1000);
 
 // ------------------------------------------------------------ top bar
-function renderTop() {
+const FAC_SHORT = { ResearchAndDevelopment: "R&D", VehicleAssemblyBuilding: "VAB", SpaceplaneHangar: "SPH",
+  AstronautComplex: "Astronaut", TrackingStation: "Tracking", MissionControl: "Mission Ctrl" };
+function renderTop(pulse) { // on each new save; next-up and the save age refresh on their own
   const h = D.header, c = D.career;
-  const age = Math.max(0, Date.now() / 1000 - h.mtime_epoch); // mtime_epoch is timezone-free
-  const cls = offline ? "dead" : age < 120 ? "" : age < 900 ? "stale" : "dead";
-  const ageTxt = age < 60 ? Math.round(age) + " s ago" : age < 3600 ? Math.round(age / 60) + " min ago" : Math.round(age / 3600) + " h ago";
-  const status = offline ? `<span class="bad">dashboard server offline</span> — is --serve running?` : `save written ${ageTxt}`;
-  const facs = Object.entries(c.facilities || {}).map(([k, v]) =>
-    `<span class="chip l${v}" title="${esc(k)}">${esc(k.replace("ResearchAndDevelopment", "R&D").replace("VehicleAssemblyBuilding", "VAB").replace("SpaceplaneHangar", "SPH").replace("AstronautComplex", "Astronaut").replace("TrackingStation", "Tracking").replace("MissionControl", "Mission Ctrl"))} L${v}</span>`).join("");
+  const facs = Object.entries(c.facilities || {}), low = facs.filter(([, v]) => v < 3); // maxed ones fold into one chip
+  const all = facs.map(([k, v]) => `${FAC_SHORT[k] || k} L${v}`).join(" · ");
+  const delta = (k, d) => { const x = DELTA[k]; return fin(x) && Math.abs(x) >= 0.05
+    ? ` <i class="delta ${x > 0 ? "good" : "bad"}" title="Change since the previous save">${x > 0 ? "+" : "−"}${num(Math.abs(x), d)}</i>` : ""; };
   $("top").innerHTML = `
-    <div class="brand">TRACKING STATION<small>${esc(h.title)} · KSP ${esc(h.version)}</small></div>
+    <div class="brand" title="Facilities: ${esc(all)}">TRACKING STATION<small>${esc(h.title)} · KSP ${esc(h.version)}</small></div>
     <div class="clock">${kdate(h.ut)}<small>UT ${num(h.ut)} s · as of last save</small></div>
-    <div class="stat funds"><b>√ ${num(c.funds)}</b><span>Funds</span></div>
-    <div class="stat sci"><b>${num(c.science, 1)}</b><span>Science</span></div>
-    <div class="stat rep"><b>${num(c.reputation, 1)}</b><span>Reputation</span></div>
-    <div class="facs">${facs}</div>
-    <div class="age"><span class="dot ${cls}"></span><div>${status}<br><span class="dim">${esc(h.file)} · ${esc(h.mtime)}</span></div></div>`;
+    <div class="stat funds"><b>√ ${num(c.funds)}</b><span>Funds${delta("funds", 0)}</span></div>
+    <div class="stat sci"><b>${num(c.science, 1)}</b><span>Science${delta("science", 1)}</span></div>
+    <div class="stat rep"><b>${num(c.reputation, 1)}</b><span>Reputation${delta("reputation", 1)}</span></div>
+    <div class="next" id="next"></div>
+    <div class="facs" title="Facilities: ${esc(all)}">${low.map(([k, v]) => `<span class="chip l${v}" title="${esc(k)}">${esc(FAC_SHORT[k] || k)} L${v}</span>`).join("")}${facs.length > low.length ? `<span class="chip l3">${facs.length - low.length} maxed</span>` : ""}</div>
+    <div class="age"><span class="dot ${pulse ? "pulse" : ""}" id="dot"></span><div><span id="ageTxt"></span><br><span class="dim">${esc(h.file)} · ${esc(h.mtime)}</span></div></div>`;
+  renderNext(); renderAge();
+}
+function renderAge() { // every second: how old the save is, and whether the server still answers
+  const age = Math.max(0, Date.now() / 1000 - D.header.mtime_epoch); // mtime_epoch is timezone-free
+  const ageTxt = age < 60 ? Math.round(age) + " s ago" : age < 3600 ? Math.round(age / 60) + " min ago" : Math.round(age / 3600) + " h ago";
+  $("dot").classList.toggle("stale", !offline && age >= 120 && age < 900);
+  $("dot").classList.toggle("dead", offline || age >= 900);
+  $("ageTxt").innerHTML = offline ? `<span class="bad">dashboard server offline</span> — is --serve running?` : `save written ${ageTxt}`;
+}
+function renderNext() { // the most urgent unmuted alert, visible whichever tab is open
+  const live = ALERTS.filter(a => !S.muted.has(a.key)), a = live[0], el = $("next");
+  el.dataset.sev = a ? a.sev : "ok"; el.dataset.id = a?.id || ""; el.dataset.tab = a?.tab || "";
+  el.title = a ? "Most urgent alert · click to jump to it" : "";
+  el.innerHTML = a ? `<span class="sev${a.sev}">${a.icon}</span><div class="txt">${a.text}<small><span class="mono">${a.right}</span> · next up${live.length > 1 ? ` · ${live.length - 1} more in Alerts` : ""}</small></div>`
+    : `<span class="good">✓</span><div class="txt">All quiet<small>no alerts</small></div>`;
 }
 
 // ------------------------------------------------------------ vessel list
@@ -355,9 +441,11 @@ function renderList() {
   for (const b of BODY_ORDER) {
     const vs = groups[b]; if (!vs) continue;
     const p = D.planets[b], moon = p.parent != null && p.parent !== 0;
-    html += `<div class="bodyhdr ${moon ? "moon" : ""}" data-body="${b}"><i style="background:${p.color}"></i>${esc(p.name)} <span class="dim">${vs.length}</span></div>`;
+    const shut = !S.q && S.collapsed.has(b); // a search opens every group
+    html += `<div class="bodyhdr ${moon ? "moon" : ""}" data-body="${b}"><span class="chev" data-collapse="${b}" title="${shut ? "Expand" : "Collapse"}">${shut ? "▸" : "▾"}</span><i style="background:${p.color}"></i>${esc(p.name)} <span class="dim">${vs.length}</span></div>`;
     vs.sort((a, c) => (MINOR.has(a.type) - MINOR.has(c.type)) || a.name.localeCompare(c.name));
     for (const v of vs) {
+      if (shut && vid(v) !== S.sel) continue; // a collapsed group still shows the selected craft
       const badges = [];
       if (v.crew.length) badges.push(`<span class="badge crew">${v.crew.length}♟</span>`);
       if (v.labs) badges.push(`<span class="badge lab">LAB</span>`);
@@ -492,28 +580,38 @@ function alerts() {
       const al = (D.alarms || []).find(a => !a.triggered && a.vessel_pid === v.pid && a.maneuver_ut && Math.abs(a.maneuver_ut - m.ut) < 1);
       if (al) merged.add(al);
       const tag = al ? ` <span class="sevinfo" title="${esc(al.title)}">⏰ ${dur(m.ut - al.ut, true)} before</span>` : m.time_until_s >= 0 ? ` <span class="dim">· no alarm</span>` : "";
-      if (m.time_until_s < 0) out.push({ sev: "bad", icon: "⚠", text: `<b>${esc(v.name)}</b> missed maneuver (${num(m.total, 1)} m/s)${tag}`, right: dur(-m.time_until_s, true) + " ago", id: vid(v), k: -1e12 });
-      else out.push({ sev: m.time_until_s < 7 * DAY ? "warn" : "info", icon: "◆", text: `<b>${esc(v.name)}</b> maneuver ${num(m.total, 1)} m/s @ ${kdate(m.ut)}${tag}`, right: "T− " + dur(m.time_until_s, true), id: vid(v), k: m.time_until_s });
+      if (m.time_until_s < 0) out.push({ sev: "bad", icon: "⚠", text: `<b>${esc(v.name)}</b> missed maneuver (${num(m.total, 1)} m/s)${tag}`, right: dur(-m.time_until_s, true) + " ago", id: vid(v), k: -1e12, key: `mnv:${vid(v)}:${Math.round(m.ut)}` });
+      else out.push({ sev: m.time_until_s < 7 * DAY ? "warn" : "info", icon: "◆", text: `<b>${esc(v.name)}</b> maneuver ${num(m.total, 1)} m/s @ ${kdate(m.ut)}${tag}`, right: "T− " + dur(m.time_until_s, true), id: vid(v), k: m.time_until_s, key: `mnv:${vid(v)}:${Math.round(m.ut)}` });
     }
     const ec = v.resources.ElectricCharge;
-    if (ec && ec[1] > 0 && ec[0] / ec[1] < 0.1) out.push({ sev: "bad", icon: "⚡", text: `<b>${esc(v.name)}</b> low electric charge`, right: `${num(ec[0] / ec[1] * 100)}%`, id: vid(v), k: -1e11 });
+    if (ec && ec[1] > 0 && ec[0] / ec[1] < 0.1) out.push({ sev: "bad", icon: "⚡", text: `<b>${esc(v.name)}</b> low electric charge`, right: `${num(ec[0] / ec[1] * 100)}%`, id: vid(v), k: -1e11, key: `ec:${vid(v)}` });
     if (v.engines.length) {
       const lf = v.resources.LiquidFuel;
-      if (lf && lf[1] > 0 && lf[0] / lf[1] < 0.1) out.push({ sev: "warn", icon: "⛽", text: `<b>${esc(v.name)}</b> low liquid fuel`, right: `${num(lf[0] / lf[1] * 100)}%`, id: vid(v), k: -1e10 });
+      if (lf && lf[1] > 0 && lf[0] / lf[1] < 0.1) out.push({ sev: "warn", icon: "⛽", text: `<b>${esc(v.name)}</b> low liquid fuel`, right: `${num(lf[0] / lf[1] * 100)}%`, id: vid(v), k: -1e10, key: `lf:${vid(v)}` });
     }
-    if (v.kerbin_relative?.in_kerbin_soi === false && v.kerbin_relative.distance_m < 1.2 * D.planets[1].soi) out.push({ sev: "warn", icon: "◎", text: `<b>${esc(v.name)}</b> near Kerbin SOI edge`, right: dist(v.kerbin_relative.distance_m), id: vid(v), k: -1e9 });
+    if (v.kerbin_relative?.in_kerbin_soi === false && v.kerbin_relative.distance_m < 1.2 * D.planets[1].soi) out.push({ sev: "warn", icon: "◎", text: `<b>${esc(v.name)}</b> near Kerbin SOI edge`, right: dist(v.kerbin_relative.distance_m), id: vid(v), k: -1e9, key: `soi:${vid(v)}` });
   }
   for (const a of D.alarms || []) {
     if (a.triggered || merged.has(a)) continue;
     out.push({ sev: a.time_until_s < 0 ? "bad" : a.time_until_s < 7 * DAY ? "warn" : "info", icon: "⏰",
       text: `Alarm <b>${esc(a.title)}</b> <span class="dim">(${esc(alarmType(a.type))})</span>${a.vessel ? ` · ${esc(a.vessel)}` : ""} @ ${kdate(a.ut)}`,
-      right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: a.vessel_pid, k: a.time_until_s });
+      right: a.time_until_s < 0 ? dur(-a.time_until_s, true) + " ago" : "T− " + dur(a.time_until_s, true), id: a.vessel_pid, k: a.time_until_s, key: `alarm:${a.title}:${Math.round(a.ut)}` });
   }
   for (const c of D.deployed_science || []) for (const e of c.experiments)
-    if (e.stored > 0 && e.no_comms) out.push({ sev: "warn", icon: "⚗", text: `Deployed <b>${esc(e.name)}</b> (${esc(c.body)}): science waiting, no link`, right: num(e.stored, 1) + " sci", id: e.vessel_pid, k: -1e8 });
+    if (e.stored > 0 && e.no_comms) out.push({ sev: "warn", icon: "⚗", text: `Deployed <b>${esc(e.name)}</b> (${esc(c.body)}): science waiting, no link`, right: num(e.stored, 1) + " sci", id: e.vessel_pid, k: -1e8, key: `dsci:${e.vessel_pid}:${e.name}` });
   for (const c of D.contracts) if (c.state === "Active" && c.time_left_s != null && c.time_left_s < 30 * DAY)
-    out.push({ sev: c.time_left_s < 5 * DAY ? "bad" : "warn", icon: "✎", text: `Contract <b>${esc(c.title || c.type)}</b> deadline`, right: dur(c.time_left_s, true), k: c.time_left_s });
+    out.push({ sev: c.time_left_s < 5 * DAY ? "bad" : "warn", icon: "✎", text: `Contract <b>${esc(c.title || c.type)}</b> deadline`, right: dur(c.time_left_s, true), tab: "contracts", k: c.time_left_s, key: `contract:${c.title || c.type}:${Math.round(c.deadline_ut)}` });
   return out.sort((a, b) => a.k - b.k);
+}
+function refreshAlerts() { // also forgets mutes whose condition has cleared, so it can alert again later
+  ALERTS = alerts();
+  const keys = new Set(ALERTS.map(a => a.key));
+  for (const k of S.muted) if (!keys.has(k)) S.muted.delete(k);
+  store.set("muted", [...S.muted]);
+}
+function toggleMute(key) {
+  S.muted.has(key) ? S.muted.delete(key) : S.muted.add(key);
+  store.set("muted", [...S.muted]); renderNext(); renderTabs();
 }
 function rings() {
   const byBody = {};
@@ -546,14 +644,17 @@ function rings() {
   });
 }
 function renderTabs() {
-  const al = alerts(), hot = al.filter(a => a.sev === "bad").length;
+  const live = ALERTS.filter(a => !S.muted.has(a.key)), muted = ALERTS.filter(a => S.muted.has(a.key));
+  const hot = live.filter(a => a.sev === "bad").length;
   const act = D.contracts.filter(c => c.state === "Active").length;
-  const tabs = [["alerts", "Alerts", al.length, hot], ["kerbals", "Kerbals", D.kerbals.length], ["contracts", "Contracts", act], ["network", "Network"], ["bodies", "Bodies"]];
+  const tabs = [["alerts", "Alerts", live.length, hot], ["kerbals", "Kerbals", D.kerbals.length], ["contracts", "Contracts", act], ["network", "Network"], ["bodies", "Bodies"]];
   $("tabbar").innerHTML = tabs.map(([k, l, n, hotN]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${l}${n != null ? `<span class="cnt ${hotN ? "hot" : ""}">${n}</span>` : ""}</button>`).join("");
   let h = "";
   if (S.tab === "alerts") {
-    h = al.length ? al.map(a => `<div class="alert" ${a.id ? `data-id="${esc(a.id)}"` : ""}><span class="sev${a.sev}">${a.icon}</span><span>${a.text}</span><span class="mono dim">${a.right}</span></div>`).join("")
-      : `<div class="empty">All quiet. No maneuvers, low resources or deadlines.</div>`;
+    const row = (a, m) => `<div class="alert ${m ? "muted" : ""}" ${a.id ? `data-id="${esc(a.id)}"` : ""} ${a.tab ? `data-tab="${a.tab}"` : ""}><span class="sev${a.sev}">${a.icon}</span><span>${a.text}</span><span class="mono dim">${a.right}</span>
+      <button class="mute" data-mute="${esc(a.key)}" title="${m ? "Unmute" : "Mute until this clears"}">${m ? "↺" : "×"}</button></div>`;
+    h = (live.length ? live.map(a => row(a)).join("") : `<div class="empty">All quiet. No maneuvers, low resources or deadlines${muted.length ? " apart from muted ones" : ""}.</div>`)
+      + (muted.length ? `<div class="mutedbar" data-showmuted>${muted.length} muted · ${S.showMuted ? "hide" : "show"}</div>` + (S.showMuted ? muted.map(a => row(a, true)).join("") : "") : "");
   } else if (S.tab === "kerbals") {
     const ks = [...D.kerbals].sort((a, b) => (a.state !== "Assigned") - (b.state !== "Assigned") || b.xp - a.xp || a.name.localeCompare(b.name));
     h = `<table><tr><th>Name</th><th>Trait</th><th>State</th><th>Vessel</th><th>Level</th><th>XP → next</th><th>If recovered</th><th class="num">Flights</th><th>Best per body</th></tr>` +
@@ -565,8 +666,8 @@ function renderTabs() {
           <td><b>${esc(k.name)}</b>${k.veteran ? ' <span class="dim" title="Veteran">★</span>' : ""}</td><td>${esc(k.trait)}</td>
           <td class="${k.state === "Assigned" ? "good" : k.state === "Dead" || k.state === "Missing" ? "bad" : "dim"}">${esc(k.state)}</td>
           <td>${esc(k.vessel || "")}</td>
-          <td><span class="pips">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= k.level ? "on" : ""}"></i>`).join("")}</span> ${k.level}</td>
-          <td><span class="xpbar"><i style="width:${pct}%"></i></span> <span class="mono dim">${k.xp}${next ? "/" + next : ""}</span></td>
+          <td class="nw"><span class="pips">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= k.level ? "on" : ""}"></i>`).join("")}</span> ${k.level}</td>
+          <td class="nw"><span class="xpbar"><i style="width:${pct}%"></i></span> <span class="mono dim">${k.xp}${next ? "/" + next : ""}</span></td>
           <td>${k.xp_if_recovered_now > k.xp ? `<span class="good">L${k.level_if_recovered_now} (${k.xp_if_recovered_now})</span>` : ""}</td>
           <td class="num">${k.flights}</td>
           <td class="dim">${Object.entries(k.best_by_body).map(([b, a]) => `${b}:${a}`).join(", ")}</td></tr>`;
@@ -623,6 +724,7 @@ function mapObjects() {
 function fitView(toSel) {
   const { fb, soi, children, vs } = mapObjects();
   const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return; // hidden: a zero size would give scale 0
   let ext = fb.radius * 3;
   const sel = selected();
   if (toSel && sel && sel.orbit?.ref === focusBody()) {
@@ -654,14 +756,26 @@ function circle(c, r, fill, stroke, w, dash) {
   if (fill) { ctx.fillStyle = fill; ctx.fill(); }
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = w || 1; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]); }
 }
-function label(txt, s, color, dy = -9) { ctx.fillStyle = color; ctx.font = "11px -apple-system, sans-serif"; ctx.textAlign = "center"; ctx.fillText(txt, s[0], s[1] + dy); }
+let labels = []; // queued while drawing, painted last by drawLabels()
+function label(txt, s, color, dy = -9, pri = 3) { labels.push({ txt, x: s[0], y: s[1] + dy, color, pri }); }
+function drawLabels() { // lowest pri first; a label that would overlap one already drawn is skipped
+  ctx.font = "11px -apple-system, sans-serif"; ctx.textAlign = "center";
+  const boxes = [];
+  for (const l of labels.sort((a, b) => a.pri - b.pri)) {
+    const w = ctx.measureText(l.txt).width, b = [l.x - w / 2 - 2, l.y - 10, l.x + w / 2 + 2, l.y + 3];
+    if (boxes.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) continue;
+    boxes.push(b); ctx.fillStyle = l.color; ctx.fillText(l.txt, l.x, l.y);
+  }
+  labels = [];
+}
 function drawMap() {
   if (!D) return;
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return; // hidden: fit once it has a size
   if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = "#04070a"; ctx.fillRect(0, 0, W, H);
-  if (!S.view) fitView();
+  if (!S.view || !(S.view.scale > 0)) fitView();
   const { f, ut, fb, soi, children, vs } = mapObjects();
   hits = [];
   const sc = S.view.scale; // also sizes the scale bar
@@ -671,7 +785,7 @@ function drawMap() {
   if (fb.atm) circle(c0, Math.max((fb.radius + fb.atm) * sc, 4), null, "rgba(70,195,255,.35)", 1, [3, 3]);
   circle(c0, Math.max(fb.radius * sc, f === 0 ? 6 : 4), fb.color, null);
   if (f !== 0 && fb.soi && fb.soi * sc < 4 * Math.max(W, H)) circle(c0, fb.soi * sc, null, "rgba(255,255,255,.12)", 1, [6, 6]);
-  label(fb.name, c0, "#fff", -Math.max(fb.radius * sc, 6) - 6);
+  label(fb.name, c0, "#fff", -Math.max(fb.radius * sc, 6) - 6, 2);
   // children (planets or moons)
   for (const c of children) {
     drawPath(orbitPath(c.orbit, soi), c.color + "66", 1);
@@ -692,21 +806,21 @@ function drawMap() {
     // Ap / Pe markers
     if (sel.orbit.ECC < 1) {
       const pe = w2s(posAtNu(sel.orbit, 0)), ap = w2s(posAtNu(sel.orbit, Math.PI));
-      circle(pe, 3.5, "#46c3ff"); label("Pe " + dist(sel.orbit.pe_alt), pe, "#9fdcff", 16);
-      circle(ap, 3.5, "#46c3ff"); label("Ap " + dist(sel.orbit.ap_alt), ap, "#9fdcff", 16);
+      circle(pe, 3.5, "#46c3ff"); label("Pe " + dist(sel.orbit.pe_alt), pe, "#9fdcff", 16, 1);
+      circle(ap, 3.5, "#46c3ff"); label("Ap " + dist(sel.orbit.ap_alt), ap, "#9fdcff", 16, 1);
     }
     let prev = sel.orbit;
     for (const m of sel.maneuvers || []) {
       const node = w2s(posAt(prev, m.ut, fb.GM));
       ctx.save(); ctx.translate(node[0], node[1]); ctx.rotate(Math.PI / 4); ctx.fillStyle = "#ffb547"; ctx.fillRect(-5, -5, 10, 10); ctx.restore();
-      label(`${num(m.total, 1)} m/s`, node, "#ffb547", -10);
+      label(`${num(m.total, 1)} m/s`, node, "#ffb547", -10, 1);
       if (m.after) { drawPath(orbitPath(m.after, soi), "#ffb547", 1.6, [7, 5]); prev = m.after; } else break;
     }
     // line to Kerbin for heliocentric craft
     if (f === 0) {
       const ks = w2s(posAt(D.planets[1].orbit, ut, fb.GM)), ss = w2s(vesselLocal(sel, ut));
       ctx.beginPath(); ctx.moveTo(ss[0], ss[1]); ctx.lineTo(ks[0], ks[1]); ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.setLineDash([2, 4]); ctx.stroke(); ctx.setLineDash([]);
-      if (sel.kerbin_relative) label(dist(sel.kerbin_relative.distance_m), [(ss[0] + ks[0]) / 2, (ss[1] + ks[1]) / 2], "#ddd", -4);
+      if (sel.kerbin_relative) label(dist(sel.kerbin_relative.distance_m), [(ss[0] + ks[0]) / 2, (ss[1] + ks[1]) / 2], "#ddd", -4, 1);
     }
   }
   for (const v of vs) {
@@ -717,9 +831,10 @@ function drawMap() {
     ctx.fillStyle = col; ctx.fillRect(-z, -z, 2 * z, 2 * z);
     if (isSel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.strokeRect(-z - 3, -z - 3, 2 * z + 6, 2 * z + 6); }
     ctx.restore();
-    if (isSel || (!MINOR.has(v.type) && sc * (v.orbit.SMA || 0) > 60)) label(v.name, s, isSel ? "#fff" : col + "cc", isSel ? -14 : -9);
-    hits.push({ s, r: 9, id: vid(v), name: v.name });
+    if (isSel || (!MINOR.has(v.type) && sc * (v.orbit.SMA || 0) > 60)) label(v.name, s, isSel ? "#fff" : col + "cc", isSel ? -14 : -9, isSel ? 0 : 4);
+    hits.push({ s, r: 9, id: vid(v), name: v.name, v });
   }
+  drawLabels();
   // scale bar
   const barM = step * (150 / sc / step > 5 ? 5 : 150 / sc / step > 2 ? 2 : 1), barPx = barM * sc;
   ctx.strokeStyle = "#7f97ab"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(W - 20 - barPx, H - 40); ctx.lineTo(W - 20, H - 40); ctx.stroke();
@@ -727,40 +842,68 @@ function drawMap() {
   const landedHere = D.vessels.filter(v => v.orbit?.ref === f && ["LANDED", "SPLASHED"].includes(v.situation) && !MINOR.has(v.type)).length;
   $("mapinfo").textContent = `${fb.name} · ${vs.filter(v => !MINOR.has(v.type)).length} in flight${landedHere ? ` · ${landedHere} landed` : ""} · positions at ${kdate(ut)}`;
 }
-// map interaction
-let drag = null;
-cv.addEventListener("mousedown", e => { drag = { x: e.clientX, y: e.clientY, cx: S.view.cx, cy: S.view.cy, moved: false }; cv.classList.add("drag"); });
-window.addEventListener("mouseup", e => {
+// map interaction: mouse, pen and touch (one finger pans, two pinch-zoom)
+const ptrs = new Map(); // pointers down on the map: id -> [x, y]
+let drag = null, lastSize = 0;
+function pick(x, y) { // nearest clickable thing at canvas point x, y
+  let best = null, bd = 1e9;
+  for (const h of hits) { const d = Math.hypot(h.s[0] - x, h.s[1] - y); if (d < Math.max(h.r, 9) && d < bd) { bd = d; best = h; } }
+  return best;
+}
+function startDrag() { // (re)start from the pointers now down, so adding or lifting a finger doesn't jump
+  const [a, b = a] = ptrs.values();
+  drag = { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]),
+    cx: S.view.cx, cy: S.view.cy, scale: S.view.scale, moved: drag?.moved || ptrs.size > 1 };
+}
+function hover(x, y) {
+  const tip = $("tip"), h = pick(x, y), o = h?.v?.orbit;
+  if (!h) { tip.style.display = "none"; return; }
+  tip.innerHTML = h.v ? `<b>${esc(h.name)}</b><br><span class="dim">${esc(h.v.type)} · ${esc(h.v.situation)}</span><br>${o.ECC < 1 ? `Ap ${dist(o.ap_alt)} · ` : "escaping · "}Pe ${dist(o.pe_alt)}`
+    : `<b>${esc(h.name)}</b> <span class="dim">· click to focus</span>`;
+  tip.style.display = "block";
+  tip.style.left = (x + 14 + tip.offsetWidth > cv.clientWidth ? x - 10 - tip.offsetWidth : x + 14) + "px"; tip.style.top = y + 8 + "px";
+}
+cv.addEventListener("pointerdown", e => {
+  if (!S.view) return;
+  cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  startDrag(); cv.classList.add("drag"); $("tip").style.display = "none";
+});
+cv.addEventListener("pointermove", e => {
+  const r = cv.getBoundingClientRect();
+  if (!ptrs.has(e.pointerId)) { if (e.pointerType === "mouse") hover(e.clientX - r.left, e.clientY - r.top); return; }
+  ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  const [a, b = a] = ptrs.values(), x = (a[0] + b[0]) / 2, y = (a[1] + b[1]) / 2, d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+  if (Math.abs(x - drag.x) + Math.abs(y - drag.y) > 4) drag.moved = true;
+  const sc = drag.d && d ? drag.scale * d / drag.d : drag.scale, W2 = r.width / 2, H2 = r.height / 2;
+  const wx = drag.cx + (drag.x - r.left - W2) / drag.scale, wy = drag.cy - (drag.y - r.top - H2) / drag.scale; // world point that started under the pointers
+  S.view = { cx: wx - (x - r.left - W2) / sc, cy: wy + (y - r.top - H2) / sc, scale: sc }; drawMap();
+});
+function endPointer(e) {
+  if (!ptrs.delete(e.pointerId)) return;
+  if (ptrs.size) return startDrag(); // a finger is still down: keep panning from there
   cv.classList.remove("drag");
-  if (drag && !drag.moved && e.target === cv) {
-    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    let best = null, bd = 1e9;
-    for (const h of hits) { const d = Math.hypot(h.s[0] - x, h.s[1] - y); if (d < Math.max(h.r, 9) && d < bd) { bd = d; best = h; } }
+  if (e.type === "pointerup" && !drag.moved) {
+    const r = cv.getBoundingClientRect(), best = pick(e.clientX - r.left, e.clientY - r.top);
     if (best?.id) select(best.id, false); else if (best?.body != null) setFocus(best.body);
   }
   drag = null;
-});
-window.addEventListener("mousemove", e => {
-  if (drag) {
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-    S.view.cx = drag.cx - dx / S.view.scale; S.view.cy = drag.cy + dy / S.view.scale; drawMap(); return;
-  }
-  if (e.target !== cv) { $("tip").style.display = "none"; return; }
-  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-  const h = hits.find(h => Math.hypot(h.s[0] - x, h.s[1] - y) < Math.max(h.r, 9));
-  const tip = $("tip");
-  if (h) { tip.style.display = "block"; tip.style.left = x + 14 + "px"; tip.style.top = y + 8 + "px"; tip.textContent = h.name + (h.body != null ? " — click to focus" : ""); }
-  else tip.style.display = "none";
-});
+}
+cv.addEventListener("pointerup", endPointer);
+cv.addEventListener("pointercancel", endPointer);
+cv.addEventListener("pointerleave", () => { $("tip").style.display = "none"; });
 cv.addEventListener("wheel", e => {
-  e.preventDefault();
+  e.preventDefault(); if (!S.view) return;
   const r = cv.getBoundingClientRect(), x = e.clientX - r.left - cv.clientWidth / 2, y = e.clientY - r.top - cv.clientHeight / 2;
   const wx = S.view.cx + x / S.view.scale, wy = S.view.cy - y / S.view.scale;
   S.view.scale *= Math.exp(-e.deltaY * 0.0015);
   S.view.cx = wx - x / S.view.scale; S.view.cy = wy + y / S.view.scale; drawMap();
 }, { passive: false });
-new ResizeObserver(() => drawMap()).observe($("mapwrap"));
+new ResizeObserver(() => { // zoom with the canvas, so the same area stays framed
+  const m = Math.min(cv.clientWidth, cv.clientHeight);
+  if (S.view && lastSize && m) S.view.scale *= m / lastSize;
+  if (m) lastSize = m;
+  drawMap();
+}).observe($("mapwrap"));
 
 // ------------------------------------------------------------ actions
 function setFocus(b, keepView) {
@@ -772,7 +915,8 @@ function select(id, fromList) {
   const v = selected();
   if (v?.orbit?.ref != null && v.orbit.ref !== focusBody()) { S.focus = v.orbit.ref; store.set("focus", S.focus); S.view = null; }
   renderList(); renderSide(); renderFocus(); drawMap();
-  if (fromList) document.querySelector(".vrow.sel")?.scrollIntoView({ block: "nearest" });
+  if (fromList && matchMedia("(max-width: 1000px)").matches) $("side").scrollIntoView({ behavior: "smooth" }); // one column: show the details
+  else if (fromList) document.querySelector(".vrow.sel")?.scrollIntoView({ block: "nearest" });
 }
 function renderFocus() {
   $("focus").innerHTML = BODY_ORDER.map(i => `<option value="${i}" ${i === focusBody() ? "selected" : ""}>${D.planets[i].parent && D.planets[i].parent !== 0 ? "  └ " : ""}${D.planets[i].name}</option>`).join("");
@@ -789,8 +933,18 @@ $("search").addEventListener("keydown", e => {
   if (e.key === "Escape") { e.target.value = ""; setSearch(""); e.target.blur(); }
   else if (e.key === "Enter") { const row = document.querySelector("#vlist .vrow"); if (row) select(row.dataset.id, true); }
 });
+const help = $("help");
+$("btnHelp").addEventListener("click", () => { help.hidden = false; });
+help.addEventListener("click", e => { if (e.target === help || e.target.closest(".x")) help.hidden = true; });
 document.addEventListener("keydown", e => {
-  if (e.key === "/" && !["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) { e.preventDefault(); $("search").focus(); }
+  const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName);
+  if (e.key === "Escape" && !help.hidden) help.hidden = true;
+  else if (e.key === "/" && !typing) { e.preventDefault(); $("search").focus(); }
+  else if (e.key === "?" && !typing) help.hidden = !help.hidden;
+});
+$("top").addEventListener("click", e => {
+  const n = e.target.closest("#next"); if (!n) return;
+  if (n.dataset.id) select(n.dataset.id, true); else if (n.dataset.tab) setTab(n.dataset.tab);
 });
 function applyFilters() { store.set("filters", [...S.filters]); syncChips(); renderList(); drawMap(); }
 $("filters").addEventListener("click", e => {
@@ -804,23 +958,30 @@ $("filters").addEventListener("dblclick", e => { // solo: show only this type
   S.filters = new Set([t]); applyFilters();
 });
 $("vlist").addEventListener("click", e => {
+  const ch = e.target.closest("[data-collapse]");
+  if (ch) { const b = +ch.dataset.collapse; S.collapsed.has(b) ? S.collapsed.delete(b) : S.collapsed.add(b); store.set("collapsed", [...S.collapsed]); return renderList(); }
   const row = e.target.closest(".vrow"); if (row) return select(row.dataset.id, true);
   const hb = e.target.closest(".bodyhdr"); if (hb) setFocus(+hb.dataset.body);
 });
-$("tabbar").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.tab = b.dataset.tab; store.set("tab", S.tab); renderTabs(); });
+function setTab(t) { S.tab = t; store.set("tab", t); renderTabs(); }
+$("tabbar").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setTab(b.dataset.tab); });
 $("tabbody").addEventListener("click", e => {
+  const m = e.target.closest("[data-mute]"); if (m) return toggleMute(m.dataset.mute);
+  if (e.target.closest("[data-showmuted]")) { S.showMuted = !S.showMuted; return renderTabs(); }
   const el = e.target.closest("[data-id]"); if (el) return select(el.dataset.id, true);
+  const t = e.target.closest("[data-tab]"); if (t) return setTab(t.dataset.tab);
   const b = e.target.closest("[data-body]"); if (b) setFocus(+b.dataset.body);
 });
 
 // ------------------------------------------------------------ render
-function renderAll() {
+function renderAll(updated) {
   $("nodata").style.display = "none";
   if (S.sel && !selected()) S.sel = null;
   if (!S.sel) { const st = D.vessels.find(v => v.type === "Station") || D.vessels.find(v => !MINOR.has(v.type)); if (st) S.sel = vid(st); }
   if (S.focus == null) S.focus = selected()?.orbit?.ref ?? 1;
   const keepView = S.view;
-  renderTop(); renderFilters(); renderList(); renderSide(); renderTabs(); renderFocus();
+  refreshAlerts();
+  renderTop(updated); renderFilters(); renderList(); renderSide(); renderTabs(); renderFocus();
   S.view = keepView; drawMap();
 }
 load();

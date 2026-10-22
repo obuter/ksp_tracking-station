@@ -23,7 +23,8 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 
 **`web/dashboard.html`**: one file, inline CSS/JS, no libraries.
 - Data: injects `<script src="../data/digest.js?t=…">` every 5 s; re-renders only when `header.generated_at` changes.
-- Layout: top bar, vessel list, canvas map (system/body view, zoom/pan, maneuver dashed orbits), side panel, tabs (Alerts, Kerbals, Contracts, Network, Bodies).
+- Layout: top bar (with the most urgent alert as "next up" and career change since the previous save), vessel list (collapsible body groups), canvas map (system/body view, zoom/pan by mouse or touch, maneuver dashed orbits, `?` help overlay), side panel, tabs (Alerts with mute, Kerbals, Contracts, Network, Bodies). Below 1000 px wide everything stacks into one scrolling column.
+- `alerts()` gives each alert a stable `key`; muted keys are dropped once their alert disappears, so a condition that clears and returns alerts again.
 - JS orbit maths mirrors Python's (`rotator`, `trueAnomalyAt`, `posAt`, `orbitPath`, `helioPos`).
 - UI state is kept in `localStorage` (`ksp-ts:*`); wrap access in try/catch.
 
@@ -58,7 +59,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 
 ## Workflow
 
-1. Edit.
+1. Edit. For bigger dashboard changes, work on a copy in `scratch/dashboard.html` (gitignored; `../data/digest.js` still resolves) and copy it to `web/` once verified, so a half-done page is never live.
 2. Run `python3 tools/ksp_digest.py` (newest `saves/*.sfs`, else the live save; read-only). Check that the JSON is valid and `digest.md` reads well.
 3. Preview the dashboard: start the `dashboard` config from `.claude/launch.json` (runs `--serve` on :8765) and open `/web/dashboard.html` in the browser pane.
    - If the player already runs `--serve` (port 8765 busy), use that server: it serves files from disk, so dashboard edits show on reload. Its watcher still runs the old Python until restarted and may overwrite `data/` mid-test: rerun the one-shot digest before checking.

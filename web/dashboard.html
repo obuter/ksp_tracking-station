@@ -136,7 +136,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel2); } t
   <header class="top" id="top"></header>
   <aside class="list">
     <div class="listhead">
-      <input id="search" placeholder="Search vessels…" autocomplete="off">
+      <input id="search" type="search" placeholder="Search name, crew, body, type…  ( / )" autocomplete="off" title="/ to focus · Enter selects the first match · Esc clears">
       <div class="filters" id="filters"></div>
     </div>
     <div class="vlist" id="vlist"></div>
@@ -169,7 +169,8 @@ const MINOR = new Set(["Debris", "Flag", "SpaceObject", "DeployedScienceControll
 const TYPE_COLOR = { Station: "#ffb84d", Relay: "#46c3ff", Probe: "#9ccc65", Rover: "#ffd54f", Lander: "#ff8a65",
   Ship: "#c38bff", Base: "#f06292", Plane: "#80cbc4", EVA: "#ffffff", Debris: "#5a6672", SpaceObject: "#8d6e63",
   Flag: "#90a4ae", DeployedScienceController: "#78909c", DeployedSciencePart: "#78909c" };
-const FILTER_TYPES = ["Station", "Relay", "Probe", "Rover", "Lander", "Ship", "Base", "Plane", "Minor"];
+const FILTER_TYPES = ["Station", "Relay", "Probe", "Rover", "Lander", "Ship", "Base", "Plane", "Debris", "Asteroid", "Flag", "Science"];
+const MISC_KEYS = { Debris: "Debris", Asteroid: "Asteroids", Flag: "Flags", Science: "Deployed science" }; // chip labels; hidden by default
 const ANT = { "Communotron 16": [5e5, 0], "Communotron 16-S": [5e5, 0], "HG-5": [5e6, 1], "DTS-M1": [2e9, 0],
   "RA-2": [2e9, 1], "HG-55": [15e9, 0], "RA-15": [15e9, 1], "Communotron 88-88": [100e9, 0], "RA-100": [100e9, 1] };
 const RES = [["LiquidFuel", "LF", "#ffb547"], ["Oxidizer", "Ox", "#46c3ff"], ["MonoPropellant", "Mono", "#e0e0e0"],
@@ -184,7 +185,8 @@ const store = {
 };
 const S = {
   sel: store.get("sel", null), focus: store.get("focus", null), tab: store.get("tab", "alerts"),
-  filters: new Set(store.get("filters", FILTER_TYPES.filter(t => t !== "Minor"))), q: "",
+  // "Minor" was the old single debris chip: expand it to the split chips
+  filters: new Set(store.get("filters", FILTER_TYPES.filter(t => !(t in MISC_KEYS))).flatMap(t => t === "Minor" ? Object.keys(MISC_KEYS) : [t])), q: "",
   view: null, // {cx, cy, scale}
 };
 
@@ -323,16 +325,28 @@ function renderTop() {
 }
 
 // ------------------------------------------------------------ vessel list
-function typeKey(v) { return MINOR.has(v.type) ? "Minor" : (FILTER_TYPES.includes(v.type) ? v.type : "Ship"); }
+function typeKey(v) {
+  if (v.type === "SpaceObject") return "Asteroid";
+  if (v.type === "Flag") return "Flag";
+  if (v.type.startsWith("DeployedScience")) return "Science";
+  if (MINOR.has(v.type)) return "Debris"; // Debris, DroppedPart, Unknown
+  return FILTER_TYPES.includes(v.type) ? v.type : "Ship";
+}
 function visible(v) {
   if (!S.filters.has(typeKey(v))) return false;
-  return !S.q || v.name.toLowerCase().includes(S.q);
+  return !S.q || [v.name, v.type, v.orbit?.body, ...v.crew].some(x => (x || "").toLowerCase().includes(S.q));
 }
 function renderFilters() {
   $("filters").innerHTML = FILTER_TYPES.map(t => {
     const n = D.vessels.filter(v => typeKey(v) === t).length;
-    return n ? `<button class="${S.filters.has(t) ? "on" : ""}" data-t="${t}">${t === "Minor" ? "Debris & misc" : t} ${n}</button>` : "";
-  }).join("");
+    return n ? `<button data-t="${t}" title="Click: show/hide · double-click: show only this">${MISC_KEYS[t] || t} ${n}</button>` : "";
+  }).join("") + `<button data-t="*" title="Show every vessel type (debris etc. unchanged)">all</button>`;
+  syncChips();
+}
+function syncChips() { // in place, so a double-click lands on the same button twice
+  for (const b of $("filters").children) b.classList.toggle("on", S.filters.has(b.dataset.t));
+  const mainOff = [...$("filters").children].some(b => b.dataset.t !== "*" && !(b.dataset.t in MISC_KEYS) && !S.filters.has(b.dataset.t));
+  $("filters").lastChild.style.display = mainOff ? "" : "none";
 }
 function renderList() {
   const groups = {};
@@ -745,11 +759,25 @@ $("focus").addEventListener("change", e => setFocus(+e.target.value));
 $("btnFit").addEventListener("click", () => { fitView(); drawMap(); });
 $("btnSel").addEventListener("click", () => { const v = selected(); if (!v) return; if (v.orbit?.ref !== focusBody()) { S.focus = v.orbit.ref; renderFocus(); } fitView(true); drawMap(); });
 $("btnUp").addEventListener("click", () => { const p = D.planets[focusBody()].parent; if (p != null) setFocus(p); });
-$("search").addEventListener("input", e => { S.q = e.target.value.trim().toLowerCase(); renderList(); drawMap(); });
+function setSearch(q) { S.q = q.trim().toLowerCase(); renderList(); drawMap(); }
+$("search").addEventListener("input", e => setSearch(e.target.value));
+$("search").addEventListener("keydown", e => {
+  if (e.key === "Escape") { e.target.value = ""; setSearch(""); e.target.blur(); }
+  else if (e.key === "Enter") { const row = document.querySelector("#vlist .vrow"); if (row) select(row.dataset.id, true); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "/" && !["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) { e.preventDefault(); $("search").focus(); }
+});
+function applyFilters() { store.set("filters", [...S.filters]); syncChips(); renderList(); drawMap(); }
 $("filters").addEventListener("click", e => {
   const t = e.target.dataset.t; if (!t) return;
-  S.filters.has(t) ? S.filters.delete(t) : S.filters.add(t); store.set("filters", [...S.filters]);
-  renderFilters(); renderList(); drawMap();
+  if (t === "*") FILTER_TYPES.forEach(k => k in MISC_KEYS || S.filters.add(k));
+  else S.filters.has(t) ? S.filters.delete(t) : S.filters.add(t);
+  applyFilters();
+});
+$("filters").addEventListener("dblclick", e => { // solo: show only this type
+  const t = e.target.dataset.t; if (!t || t === "*") return;
+  S.filters = new Set([t]); applyFilters();
 });
 $("vlist").addEventListener("click", e => {
   const row = e.target.closest(".vrow"); if (row) return select(row.dataset.id, true);

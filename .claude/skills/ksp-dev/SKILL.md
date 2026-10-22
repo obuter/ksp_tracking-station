@@ -9,7 +9,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 
 ## Architecture
 
-**`tools/ksp_digest.py`** (stdlib only, ~830 lines), read top to bottom:
+**`tools/ksp_digest.py`** (stdlib only, ~920 lines), read top to bottom:
 
 | Area | Functions | Notes |
 |---|---|---|
@@ -17,7 +17,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 | Parser | `Node`, `parse` | ConfigNode tree; repeated keys preserved (`getall`) |
 | Format helpers | `ksp_date`, `ksp_dur`, `dist`, `f`, `base_part` | KSP calendar: 6 h day, 426 d year |
 | Orbit maths | `orbit_info`, `position`, `state_vector`, `elements_from_state`, `kerbin_relative` | 2-body, parent-body frame; `elements_from_state` returns None for hyperbolic |
-| Extractors | `career`, `kerbal_xp`/`level_for`/`kerbals`, `vessel`, `maneuvers`, `alarms`, `contracts`, `planets` | each returns plain dicts/lists |
+| Extractors | `career`, `kerbal_xp`/`level_for`/`kerbals`, `vessel`, `maneuvers`, `alarms`, `deployed_science`, `contracts`, `planets` | each returns plain dicts/lists |
 | Output | `render` (markdown), `clean` (inf→null), `build` (writes `data/`), `serve`, `main` (watch loop) | `digest.js` written atomically via tmp + replace |
 | Paths | `ROOT`, `DATA`, `SAVES`, `find_live_save()` | `$KSP_SAVE` / `$KSP_DIR`; never hard-code a user's save name |
 
@@ -32,12 +32,13 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 - `header`: title, mode, version, ut, date, file, mtime (local-time string, display only), mtime_epoch (use for age maths), generated_at
 - `career`: funds, science, reputation, techs_unlocked, facilities{name: 1–3}
 - `kerbals[]`: name, trait, type, state, vessel, xp, level, xp_if_recovered_now, level_if_recovered_now, flights, best_by_body
-- `vessels[]`: pid, name, type, situation, lat/lon/alt, crew, `orbit`{body, ref, SMA, ECC, INC, LAN, LPE, MNA, EPH, ap_alt, pe_alt, period_s}, resources{name:[cur,max]}, antennas, engines, `dv_stages[]`{stage, engines, dv_ms, mass_t} (vacuum, launch first), dv_total_ms, labs, lab_data, docking_ports, target, `maneuvers[]`{ut, date, time_until_s, prograde, normal, radial, total, after{orbit…, kerbin_relative_at_burn}}, `kerbin_relative` (Kerbol orbiters only)
+- `vessels[]`: pid, name, type, situation, lat/lon/alt, crew, `orbit`{body, ref, SMA, ECC, INC, LAN, LPE, MNA, EPH, ap_alt, pe_alt, period_s}, resources{name:[cur,max]}, antennas, engines, `dv_stages[]`{stage, engines, dv_ms, mass_t} (vacuum, launch first), dv_total_ms, labs, lab_data, docking_ports, target, `maneuvers[]`{ut, date, time_until_s, prograde, normal, radial, total, after{orbit…, kerbin_relative_at_burn}}, `kerbin_relative` (Kerbol orbiters only), `asteroid`{size_class, tracked, lost_in_s} (SpaceObjects only)
 - `contracts[]`: type, state, agent, title (ContractConfigurator only), target_body, funds_*, science, rep_*, deadline_ut, time_left_s, params[]
-- `alarms[]`: title, type, description, vessel, ut, date, time_until_s, triggered, maneuver_ut
+- `alarms[]`: title, type, description, vessel, vessel_pid, ut, date, time_until_s, triggered, maneuver_ut
+- `deployed_science[]`: body, controller_pid, `experiments[]`{name, vessel_pid, enabled, generated, limit, transmitted, stored, no_comms, no_power}
 - `planets[]`: idx, name, radius, GM, atm, parent, color, soi, orbit
 
-**Rule:** any schema change updates `render()` and the dashboard in the same change. Keep `digest.md` compact (it is @-mentioned into chats; target <300 lines).
+**Rule:** any schema change updates `render()` and the dashboard in the same change. Keep `digest.md` compact (it is @-mentioned into chats; target <350 lines; it grows ~6 lines per vessel).
 
 ## KSP save facts (easy to get wrong)
 
@@ -52,12 +53,15 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 - Kerbals have no stored XP. It is estimated from `CAREER_LOG` with the `XP_*` table (unverified against the game).
 - Maneuvers after an SOI change are not predicted (current limitation).
 - A craft's `ORBIT` is in its current SOI's frame (`REF` = body index).
+- Asteroids/comets (`SpaceObject`): `DISCOVERY` `state` 1 = untracked (presence only), `size` 0–8 = class A–I; an untracked one is lost at `lastObservedTime + lifetime`. Their PART `mass` (150) is a placeholder.
+- `DeployedScience` scenario: SCIENCECLUSTER → MANNEDSCIENCEPARTS → MANNEDSCIENCEPART → EXPERIMENT. `VesselId` is the vessel `pid` with dashes; `ControlModulePartId` is a PART `persistentId`.
 
 ## Workflow
 
 1. Edit.
 2. Run `python3 tools/ksp_digest.py` (newest `saves/*.sfs`, else the live save; read-only). Check that the JSON is valid and `digest.md` reads well.
 3. Preview the dashboard: start the `dashboard` config from `.claude/launch.json` (runs `--serve` on :8765) and open `/web/dashboard.html` in the browser pane.
+   - If the player already runs `--serve` (port 8765 busy), use that server: it serves files from disk, so dashboard edits show on reload. Its watcher still runs the old Python until restarted and may overwrite `data/` mid-test: rerun the one-shot digest before checking.
    - Check the console for errors.
    - Check the layout at 1920×1080.
    - Click through a vessel, the map and every tab.
@@ -69,7 +73,5 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 
 - **SOI-aware prediction:** SOI entry time, arrival periapsis, and the orbit after a capture node. The play-session prototype used SOI search plus RK4 inside the SOI.
 - **CommNet link check:** per vessel and over burn windows, including occlusion (`occlusionMultiplierAtm` 0.75, `Vac` 0.9) and combined relay power `strongest × (sum/strongest)^0.75`.
-- **Verify the XP table** against the in-game Astronaut Complex.
+- **Verify against the game:** the XP table (Astronaut Complex), asteroid class letters and signal-lost time (Tracking Station), and alarm field names (`type`, `vesselId`, `maneuverUT`; no real alarm has been parsed yet).
 - **Δv fuel flow:** stages burn only the fuel in the parts they drop; no fuel lines/crossfeed rules, solid boosters (and Making History SRBs) not in `ENGINES`.
-- **Biome names** for landed craft.
-- **Deployed-science progress** (`DeployedScience` scenario: per-experiment generated/limit) in the digest and dashboard.

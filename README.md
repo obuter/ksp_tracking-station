@@ -6,11 +6,11 @@ A second-monitor companion for **Kerbal Space Program 1.12** career games.
 
 ![Tracking Station dashboard: vessel list, Kerbol system map, vessel details and alerts](docs/ksp-dash.png)
 
-- **`tools/ksp_digest.py`** reads your `.sfs` save, which can run to hundreds of thousands of lines, and writes a compact digest: career, facilities, kerbals (estimated XP), every vessel's orbit, resources, Δv, antennas, planned maneuver nodes (with the predicted orbit after each burn), alarms and contracts.
+- **`tools/ksp_digest.py`** reads your `.sfs` save, which can run to hundreds of thousands of lines, and writes a compact digest: career, facilities, kerbals (estimated XP), every vessel's orbit, resources, Δv, antennas, planned maneuver nodes (with the predicted orbit after each burn), alarms, contracts, deployed-science progress and asteroid tracking.
 - **`web/dashboard.html`** is a live "tracking station" page with:
-  - a vessel list and an orbit map (planned burns drawn dashed)
+  - a searchable vessel list and an orbit map (planned burns drawn dashed)
   - vessel details and alerts (upcoming or missed burns, low EC/fuel, deadlines, alarms)
-  - kerbals, contracts, and relay-network status
+  - kerbals, contracts, relay-network status, and planet data with the next transfer window from Kerbin
 
 Pure Python standard library and a single HTML file. No installs, no internet.
 
@@ -67,6 +67,7 @@ The script only **reads** the save. It never writes to the KSP folder.
 - Kerbal XP is estimated from flight logs.
 - Δv is a vacuum estimate per stage: each stage burns the fuel in the parts it drops (no fuel-line rules; solid boosters ignored).
 - Maneuvers that cross into another body's SOI are not predicted yet.
+- Transfer windows are Hohmann estimates from Kerbin (≈ for eccentric targets); use a transfer planner for the burn itself.
 - Positions and countdowns are as of the last save, not the live game clock.
 
 ## License

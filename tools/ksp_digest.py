@@ -5,8 +5,7 @@ Usage (from the repo root):
     python3 tools/ksp_digest.py                 # newest *.sfs in saves/, else KSP's live save
     python3 tools/ksp_digest.py --save X.sfs    # specific save
     python3 tools/ksp_digest.py --all           # include debris, flags, asteroids, deployed science
-    python3 tools/ksp_digest.py --stdout        # also print the markdown
-    python3 tools/ksp_digest.py --watch         # regenerate whenever the live persistent.sfs changes
+    python3 tools/ksp_digest.py --watch        # regenerate whenever the live persistent.sfs changes
     python3 tools/ksp_digest.py --serve         # --watch + dashboard on http://localhost:8765/web/dashboard.html
 
 Live save lookup: $KSP_SAVE (full path to a .sfs), else the most recently written
@@ -49,8 +48,27 @@ BODIES = {
     16: ("Eeloo", 210_000, 7.4410815e10, 0, 0),
 }
 BODY_ORDER = [0, 4, 5, 13, 1, 2, 3, 6, 7, 15, 8, 9, 10, 12, 11, 14, 16]
-KERBIN_ORBIT = dict(SMA=13_599_840_256, ECC=0, INC=0, LAN=0, LPE=0, MNA=3.14, EPH=0, REF=0)
-KERBIN_SOI = 84_159_286
+# idx: SMA, ECC, INC, LAN, LPE, MNA (rad, at epoch 0), SOI radius, map colour
+PLANET_ORBITS = {
+    1: (13_599_840_256, 0.0, 0.0, 0.0, 0.0, 3.14, 84_159_286, "#4a90d9"),
+    2: (12_000_000, 0.0, 0.0, 0.0, 0.0, 1.7, 2_429_559, "#9a9a9a"),
+    3: (47_000_000, 0.0, 6.0, 78.0, 38.0, 0.9, 2_247_428, "#9fe0c8"),
+    4: (5_263_138_304, 0.2, 7.0, 70.0, 15.0, 3.14, 9_646_663, "#b07850"),
+    5: (9_832_684_544, 0.01, 2.1, 15.0, 0.0, 3.14, 85_109_365, "#a050d0"),
+    6: (20_726_155_264, 0.051, 0.06, 135.5, 0.0, 3.14, 47_921_949, "#d0603a"),
+    7: (3_200_000, 0.03, 0.2, 0.0, 0.0, 1.7, 1_049_599, "#8a8a8a"),
+    8: (68_773_560_320, 0.05, 1.304, 52.0, 0.0, 0.1, 2_455_985_200, "#6ab04c"),
+    9: (27_184_000, 0.0, 0.0, 0.0, 0.0, 3.14, 3_723_646, "#4a7fb0"),
+    10: (43_152_000, 0.0, 0.0, 0.0, 0.0, 0.9, 2_406_401, "#a8c8e0"),
+    11: (128_500_000, 0.235, 15.0, 10.0, 25.0, 0.9, 1_221_061, "#8a7050"),
+    12: (68_500_000, 0.0, 0.025, 0.0, 0.0, 3.14, 10_856_518, "#d8c8b0"),
+    13: (31_500_000, 0.55, 12.0, 80.0, 10.0, 0.9, 126_123, "#a08070"),
+    14: (179_890_000, 0.171, 4.25, 2.0, 15.0, 0.9, 1_042_139, "#d8d080"),
+    15: (40_839_348_203, 0.145, 5.0, 280.0, 90.0, 3.14, 32_832_840, "#a0a0a0"),
+    16: (90_118_820_000, 0.26, 6.15, 50.0, 260.0, 3.14, 119_082_940, "#d0d8e0"),
+}
+KERBIN_ORBIT = dict(zip(("SMA", "ECC", "INC", "LAN", "LPE", "MNA"), PLANET_ORBITS[1]), EPH=0, REF=0)
+KERBIN_SOI = PLANET_ORBITS[1][6]
 
 DAY, YEAR = 6 * 3600, 426 * 6 * 3600
 
@@ -187,6 +205,8 @@ def ksp_date(ut):
 def ksp_dur(t):
     if t is None or not math.isfinite(t):
         return "—"
+    if t < 0:
+        return "-" + ksp_dur(-t)
     y, rem = divmod(t, YEAR)
     d, rem = divmod(rem, DAY)
     h, rem = divmod(rem, 3600)
@@ -226,23 +246,6 @@ def orbit_info(o):
         info["pe_alt"] = (a * (1 - e) - R) if a and GM else None
         info["period_s"] = None
     return info
-
-
-def position(el, ut, GM):
-    """3D position of an elliptical orbit at time ut (frame of the parent body)."""
-    a, e = el["SMA"], el["ECC"]
-    n = math.sqrt(GM / a ** 3)
-    M = el["MNA"] + n * (ut - el["EPH"])
-    E = M
-    for _ in range(50):
-        E -= (E - e * math.sin(E) - M) / (1 - e * math.cos(E))
-    nu = 2 * math.atan2(math.sqrt(1 + e) * math.sin(E / 2), math.sqrt(1 - e) * math.cos(E / 2))
-    r = a * (1 - e * math.cos(E))
-    i, O, w = (math.radians(el[k]) for k in ("INC", "LAN", "LPE"))
-    u = w + nu
-    return (r * (math.cos(O) * math.cos(u) - math.sin(O) * math.sin(u) * math.cos(i)),
-            r * (math.sin(O) * math.cos(u) + math.cos(O) * math.sin(u) * math.cos(i)),
-            r * math.sin(u) * math.sin(i))
 
 
 def state_vector(el, ut, GM):
@@ -318,7 +321,7 @@ def maneuvers(v, orb, ut):
             vel2 = tuple(vel[k] + prograde * pro[k] + normal * nrm[k] + radial * rad[k] for k in range(3))
             el = elements_from_state(pos, vel2, t, GM, ref)
             if el:
-                after = orbit_info(Node_from(el))
+                after = orbit_info(el)
                 if ref == 0:
                     after["kerbin_relative_at_burn"] = kerbin_relative(after, t)
                 node["after"] = after
@@ -328,18 +331,12 @@ def maneuvers(v, orb, ut):
     return out
 
 
-def Node_from(el):
-    n = Node("ORBIT")
-    n.values = [(k, repr(v)) for k, v in el.items()]
-    return n
-
-
 def kerbin_relative(el, ut):
     GM = BODIES[0][2]
     if el["SMA"] <= 0 or el["ECC"] >= 1:
         return None
-    p = position(el, ut, GM)
-    k = position(KERBIN_ORBIT, ut, GM)
+    p = state_vector(el, ut, GM)[0]
+    k = state_vector(KERBIN_ORBIT, ut, GM)[0]
     d = math.dist(p, k)
     phase = (math.degrees(math.atan2(p[1], p[0]) - math.atan2(k[1], k[0])) + 180) % 360 - 180
     tk = 2 * math.pi * math.sqrt(KERBIN_ORBIT["SMA"] ** 3 / GM)
@@ -403,7 +400,7 @@ def kerbals(game, crew_map):
         out.append(dict(
             name=name, trait=k.get("trait"), type=k.get("type"), state=k.get("state"),
             vessel=crew_map.get(name), veteran=k.get("veteran") == "True",
-            xp=xp + extra, level=level_for(xp + extra), extraXP=extra,
+            xp=xp + extra, level=level_for(xp + extra),
             xp_if_recovered_now=xp_if_recovered + extra,
             level_if_recovered_now=level_for(xp_if_recovered + extra),
             flights=int(f(cl.get("flight"))) if cl else 0,
@@ -482,20 +479,19 @@ def stage_dv(parts):
 def vessel(v, ut):
     o = v.node("ORBIT")
     orb = orbit_info(o) if o else {}
-    parts, crew, res = [], [], {}
+    crew, res = [], {}
     dry = 0.0
-    antennas, engines, labs, ports, science = [], [], [], 0, 0
+    antennas, engines, labs, ports = [], [], [], 0
     lab_data = 0.0
     stored_data = 0
     for p in v.nodes("PART"):
         pname = base_part(p.get("name"))
-        parts.append(pname)
         dry += f(p.get("mass"))
         crew += p.getall("crew")
         if pname in ANTENNAS:
-            antennas.append(ANTENNAS[pname])
+            antennas.append(ANTENNAS[pname][0])
         if pname in ENGINES:
-            engines.append(ENGINES[pname])
+            engines.append(ENGINES[pname][0])
         if "dockingPort" in pname:
             ports += 1
         for r in p.nodes("RESOURCE"):
@@ -509,24 +505,17 @@ def vessel(v, ut):
             if mn == "ModuleScienceLab":
                 labs.append(pname)
                 lab_data += f(m.get("dataStored"))
-            elif mn in ("ModuleScienceExperiment", "ModuleScienceContainer"):
-                science += 1 if mn == "ModuleScienceExperiment" else 0
             stored_data += len(m.nodes("ScienceData"))
     wet = dry + sum(DENSITY.get(k, 0) * a[0] for k, a in res.items())
     stages = stage_dv(v.nodes("PART"))
-    best_relay = max((a for a in antennas if a[2]), key=lambda a: a[1], default=None)
-    best_direct = max(antennas, key=lambda a: a[1], default=None)
     out = dict(
         pid=v.get("pid"), name=v.get("name"), type=v.get("type"), situation=v.get("sit"),
         landed_at=v.get("displaylandedAt") or v.get("landedAt") or None,
         lat=f(v.get("lat")), lon=f(v.get("lon")), alt=f(v.get("alt")),
         mission_time_s=f(v.get("met")), crew=crew, orbit=orb,
-        parts_count=len(parts), dry_mass_t=round(dry, 3), wet_mass_t=round(wet, 3),
+        parts_count=len(v.nodes("PART")), dry_mass_t=round(dry, 3), wet_mass_t=round(wet, 3),
         resources={k: [round(a[0], 1), round(a[1], 1)] for k, a in res.items()},
-        antennas=[a[0] for a in antennas],
-        best_relay=best_relay[0] if best_relay else None,
-        best_antenna_power=best_direct[1] if best_direct else None,
-        engines=[e[0] for e in engines],
+        antennas=antennas, engines=engines,
         dv_stages=stages, dv_total_ms=sum(s["dv_ms"] for s in stages),
         labs=len(labs), lab_data=round(lab_data, 1), stored_science_items=stored_data,
         docking_ports=ports,
@@ -610,7 +599,7 @@ def render(d, show_all):
           f"Funds **{c.get('funds', 0):,.0f}** · Science **{c.get('science', 0):,.1f}** · "
           f"Reputation **{c.get('reputation', 0):,.1f}** · Techs unlocked {c.get('techs_unlocked', 0)}", ""]
     fac = c.get("facilities", {})
-    L += md_table(["Facility", "Level"], [(k, f"L{v}") for k, v in fac.items()]) + [""]
+    L += ["Facilities: " + " · ".join(f"{k} L{v}" for k, v in fac.items()), ""]
 
     L += ["## Kerbals", "", "_XP/level are computed from flight logs (estimate); "
           "'if recovered' includes the current unrecovered flight._", ""]
@@ -646,7 +635,8 @@ def render(d, show_all):
         for v in sorted(vs, key=lambda v: (v["situation"] != "ORBITING", v["name"])):
             o = v["orbit"]
             L.append(f"**{v['name']}** — {v['type']}, {v['situation']}"
-                     + (f", crew: {', '.join(v['crew'])}" if v["crew"] else ""))
+                     + (f", crew: {', '.join(v['crew'])}" if v["crew"] else "")
+                     + (f", target: {v['target']}" if v.get("target") else ""))
             if v["situation"] in ("LANDED", "SPLASHED", "PRELAUNCH"):
                 L.append(f"- Position: lat {v['lat']:.3f}°, lon {v['lon']:.3f}°"
                          + (f", at {v['landed_at']}" if v["landed_at"] else ""))
@@ -668,23 +658,18 @@ def render(d, show_all):
                 bits.append("engines: " + ", ".join(sorted(set(v["engines"]))))
             if len(v["dv_stages"]) == 1:
                 bits.append(f"Δv≈ {v['dv_total_ms']:,} m/s vac")
+            if v["antennas"]:
+                bits.append("antennas: " + ", ".join(sorted(set(v["antennas"]))))
+            if v["labs"]:
+                bits.append(f"lab ×{v['labs']} (data {v['lab_data']:g})")
+            if v["stored_science_items"]:
+                bits.append(f"{v['stored_science_items']} science results aboard")
+            if v["docking_ports"]:
+                bits.append(f"{v['docking_ports']} docking ports")
             L.append("- " + " · ".join(bits))
             if len(v["dv_stages"]) > 1:
                 L.append(f"- Δv≈ {v['dv_total_ms']:,} m/s vac: " + " → ".join(
                     f"S{s['stage']} {s['dv_ms']:,} ({', '.join(s['engines'])})" for s in v["dv_stages"]))
-            extras = []
-            if v["antennas"]:
-                extras.append("antennas: " + ", ".join(sorted(set(v["antennas"]))))
-            if v["labs"]:
-                extras.append(f"lab ×{v['labs']} (data {v['lab_data']:g})")
-            if v["stored_science_items"]:
-                extras.append(f"{v['stored_science_items']} science results aboard")
-            if v["docking_ports"]:
-                extras.append(f"{v['docking_ports']} docking ports")
-            if extras:
-                L.append("- " + " · ".join(extras))
-            if v.get("target"):
-                L.append(f"- Target: {v['target']}")
             for i, m in enumerate(v.get("maneuvers", []), 1):
                 when = (f"in {ksp_dur(m['time_until_s'])}" if m["time_until_s"] >= 0
                         else f"{ksp_dur(-m['time_until_s'])} AGO (missed)")
@@ -742,26 +727,6 @@ def find_live_save():
              if p.parent.name not in ("scenarios", "training")]
     return max(found, key=lambda p: p.stat().st_mtime) if found else None
 
-# idx: SMA, ECC, INC, LAN, LPE, MNA (rad, at epoch 0), SOI radius, map colour
-PLANET_ORBITS = {
-    1: (13_599_840_256, 0.0, 0.0, 0.0, 0.0, 3.14, 84_159_286, "#4a90d9"),
-    2: (12_000_000, 0.0, 0.0, 0.0, 0.0, 1.7, 2_429_559, "#9a9a9a"),
-    3: (47_000_000, 0.0, 6.0, 78.0, 38.0, 0.9, 2_247_428, "#9fe0c8"),
-    4: (5_263_138_304, 0.2, 7.0, 70.0, 15.0, 3.14, 9_646_663, "#b07850"),
-    5: (9_832_684_544, 0.01, 2.1, 15.0, 0.0, 3.14, 85_109_365, "#a050d0"),
-    6: (20_726_155_264, 0.051, 0.06, 135.5, 0.0, 3.14, 47_921_949, "#d0603a"),
-    7: (3_200_000, 0.03, 0.2, 0.0, 0.0, 1.7, 1_049_599, "#8a8a8a"),
-    8: (68_773_560_320, 0.05, 1.304, 52.0, 0.0, 0.1, 2_455_985_200, "#6ab04c"),
-    9: (27_184_000, 0.0, 0.0, 0.0, 0.0, 3.14, 3_723_646, "#4a7fb0"),
-    10: (43_152_000, 0.0, 0.0, 0.0, 0.0, 0.9, 2_406_401, "#a8c8e0"),
-    11: (128_500_000, 0.235, 15.0, 10.0, 25.0, 0.9, 1_221_061, "#8a7050"),
-    12: (68_500_000, 0.0, 0.025, 0.0, 0.0, 3.14, 10_856_518, "#d8c8b0"),
-    13: (31_500_000, 0.55, 12.0, 80.0, 10.0, 0.9, 126_123, "#a08070"),
-    14: (179_890_000, 0.171, 4.25, 2.0, 15.0, 0.9, 1_042_139, "#d8d080"),
-    15: (40_839_348_203, 0.145, 5.0, 280.0, 90.0, 3.14, 32_832_840, "#a0a0a0"),
-    16: (90_118_820_000, 0.26, 6.15, 50.0, 260.0, 3.14, 119_082_940, "#d0d8e0"),
-}
-
 
 def planets():
     out = []
@@ -785,7 +750,7 @@ def clean(x):
     return x
 
 
-def build(save, show_all, to_stdout=False):
+def build(save, show_all):
     game = parse(save.read_text(encoding="utf-8", errors="replace"))
     fs = game.node("FLIGHTSTATE")
     if fs is None:
@@ -816,8 +781,6 @@ def build(save, show_all, to_stdout=False):
     tmp = DATA / "digest.js.tmp"
     tmp.write_text("window.DIGEST = " + js + ";\n", encoding="utf-8")
     tmp.replace(DATA / "digest.js")  # atomic swap so the dashboard never reads half a file
-    if to_stdout:
-        print(md)
     major = sum(1 for v in vessels if v["type"] not in MINOR_TYPES)
     print(f"[{dt.datetime.now():%H:%M:%S}] {save.name} @ {data['header']['date']}: {major} vessels "
           f"({len(vessels)} incl. minor), {len(data['kerbals'])} kerbals, "
@@ -852,7 +815,6 @@ def main():
     ap.add_argument("--save", type=Path, help="path to .sfs (default: newest *.sfs in saves/, "
                                               "else KSP's live persistent.sfs; with --watch: always the live save)")
     ap.add_argument("--all", action="store_true", help="include debris, flags, asteroids, deployed science")
-    ap.add_argument("--stdout", action="store_true", help="also print the markdown digest")
     ap.add_argument("--watch", nargs="?", const=5.0, type=float, metavar="SECONDS",
                     help="keep running; regenerate whenever the save changes (poll interval, default 5 s)")
     ap.add_argument("--serve", nargs="?", const=8765, type=int, metavar="PORT",
@@ -873,7 +835,7 @@ def main():
         ap.error(f"save not found: {save}")
 
     if not args.watch:
-        build(save, args.all, args.stdout)
+        build(save, args.all)
         return
 
     import time

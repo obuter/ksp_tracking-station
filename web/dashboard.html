@@ -163,7 +163,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel2); }
 <script>
 "use strict";
 // ------------------------------------------------------------ constants
-const DAY = 21600, YEAR = 426 * DAY, G0 = 9.80665, DSN = 250e9;
+const DAY = 21600, YEAR = 426 * DAY, DSN = 250e9;
 const BODY_ORDER = [0, 4, 5, 13, 1, 2, 3, 6, 7, 15, 8, 9, 10, 12, 11, 14, 16];
 const MINOR = new Set(["Debris", "Flag", "SpaceObject", "DeployedScienceController", "DeployedSciencePart", "DroppedPart", "Unknown"]);
 const TYPE_COLOR = { Station: "#ffb84d", Relay: "#46c3ff", Probe: "#9ccc65", Rover: "#ffd54f", Lander: "#ff8a65",
@@ -177,7 +177,7 @@ const RES = [["LiquidFuel", "LF", "#ffb547"], ["Oxidizer", "Ox", "#46c3ff"], ["M
 const XP_LEVELS = [0, 2, 8, 16, 32, 64];
 
 // ------------------------------------------------------------ state
-let D = null, lastGen = null;
+let D = null, lastGen = null, offline = false;
 const store = {
   get(k, d) { try { const v = localStorage.getItem("ksp-ts:" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("ksp-ts:" + k, JSON.stringify(v)); } catch {} },
@@ -281,8 +281,11 @@ function distToKerbin(v) {
 function load() {
   const s = document.createElement("script");
   s.src = "../data/digest.js?t=" + Date.now();
-  s.onload = () => { s.remove(); if (window.DIGEST && window.DIGEST.header.generated_at !== lastGen) { D = window.DIGEST; lastGen = D.header.generated_at; renderAll(); } };
-  s.onerror = () => { s.remove(); if (!D) $("nodata").style.display = "flex"; };
+  s.onload = () => {
+    s.remove(); offline = false;
+    if (window.DIGEST && window.DIGEST.header.generated_at !== lastGen) { D = window.DIGEST; lastGen = D.header.generated_at; renderAll(); }
+  };
+  s.onerror = () => { s.remove(); offline = true; if (!D) $("nodata").style.display = "flex"; };
   document.head.appendChild(s);
 }
 setInterval(load, 5000);
@@ -291,11 +294,10 @@ setInterval(() => D && renderTop(), 1000);
 // ------------------------------------------------------------ top bar
 function renderTop() {
   const h = D.header, c = D.career;
-  // mtime_epoch is timezone-free; the local-time string is only a fallback for digests from older script versions
-  const savedMs = fin(h.mtime_epoch) ? h.mtime_epoch * 1000 : new Date(h.mtime.replace(" ", "T")).getTime();
-  const age = Math.max(0, (Date.now() - savedMs) / 1000);
-  const cls = age < 120 ? "" : age < 900 ? "stale" : "dead";
+  const age = Math.max(0, Date.now() / 1000 - h.mtime_epoch); // mtime_epoch is timezone-free
+  const cls = offline ? "dead" : age < 120 ? "" : age < 900 ? "stale" : "dead";
   const ageTxt = age < 60 ? Math.round(age) + " s ago" : age < 3600 ? Math.round(age / 60) + " min ago" : Math.round(age / 3600) + " h ago";
+  const status = offline ? `<span class="bad">dashboard server offline</span> — is --serve running?` : `save written ${ageTxt}`;
   const facs = Object.entries(c.facilities || {}).map(([k, v]) =>
     `<span class="chip l${v}" title="${esc(k)}">${esc(k.replace("ResearchAndDevelopment", "R&D").replace("VehicleAssemblyBuilding", "VAB").replace("SpaceplaneHangar", "SPH").replace("AstronautComplex", "Astronaut").replace("TrackingStation", "Tracking").replace("MissionControl", "Mission Ctrl"))} L${v}</span>`).join("");
   $("top").innerHTML = `
@@ -305,7 +307,7 @@ function renderTop() {
     <div class="stat sci"><b>${num(c.science, 1)}</b><span>Science</span></div>
     <div class="stat rep"><b>${num(c.reputation, 1)}</b><span>Reputation</span></div>
     <div class="facs">${facs}</div>
-    <div class="age"><span class="dot ${cls}"></span><div>save written ${ageTxt}<br><span class="dim">${esc(h.file)} · ${esc(h.mtime)}</span></div></div>`;
+    <div class="age"><span class="dot ${cls}"></span><div>${status}<br><span class="dim">${esc(h.file)} · ${esc(h.mtime)}</span></div></div>`;
 }
 
 // ------------------------------------------------------------ vessel list
@@ -358,14 +360,15 @@ function orbitKV(o) {
 }
 function kerbinBox(kr, title) {
   if (!kr) return "";
-  const drift = kr.period_minus_kerbin_s, perYear = -drift / 9203545 * 360; // deg gained per Kerbin year
+  const k = D.planets[1], kYear = 2 * Math.PI * Math.sqrt(k.orbit.SMA ** 3 / D.planets[0].GM);
+  const drift = kr.period_minus_kerbin_s, perYear = -drift / kYear * 360; // deg gained per Kerbin year
   const dc = Math.abs(drift) < 60 ? "good" : Math.abs(drift) < 20000 ? "warn" : "bad";
   return `<div class="box"><dl class="kv">
     <dt>${title}</dt><dd class="${kr.phase_deg > 0 ? "good" : "warn"}">${kr.phase_deg > 0 ? "+" : ""}${num(kr.phase_deg, 2)}° ${kr.phase_deg > 0 ? "ahead" : "behind"}</dd>
     <dt>Distance</dt><dd>${dist(kr.distance_m)}${kr.in_kerbin_soi ? ' <span class="bad">IN SOI</span>' : ""}</dd>
     <dt>Radial offset</dt><dd>${dist(kr.radial_offset_m)}</dd>
     <dt>Period diff</dt><dd class="${dc}">${drift > 0 ? "+" : ""}${num(drift)} s</dd>
-    <dt>Drift</dt><dd class="${dc}">${perYear > 0 ? "+" : ""}${num(perYear, 2)}° / yr (${dist(Math.abs(perYear) * Math.PI / 180 * 13599840256)}/yr)</dd></dl></div>`;
+    <dt>Drift</dt><dd class="${dc}">${perYear > 0 ? "+" : ""}${num(perYear, 2)}° / yr (${dist(Math.abs(perYear) * Math.PI / 180 * k.orbit.SMA)}/yr)</dd></dl></div>`;
 }
 function renderSide() {
   const v = selected();
@@ -449,7 +452,7 @@ function alerts() {
       const lf = v.resources.LiquidFuel;
       if (lf && lf[1] > 0 && lf[0] / lf[1] < 0.1) out.push({ sev: "warn", icon: "⛽", text: `<b>${esc(v.name)}</b> low liquid fuel`, right: `${num(lf[0] / lf[1] * 100)}%`, id: vid(v), k: -1e10 });
     }
-    if (v.kerbin_relative?.in_kerbin_soi === false && v.kerbin_relative.distance_m < 1.2 * 84159286) out.push({ sev: "warn", icon: "◎", text: `<b>${esc(v.name)}</b> near Kerbin SOI edge`, right: dist(v.kerbin_relative.distance_m), id: vid(v), k: -1e9 });
+    if (v.kerbin_relative?.in_kerbin_soi === false && v.kerbin_relative.distance_m < 1.2 * D.planets[1].soi) out.push({ sev: "warn", icon: "◎", text: `<b>${esc(v.name)}</b> near Kerbin SOI edge`, right: dist(v.kerbin_relative.distance_m), id: vid(v), k: -1e9 });
   }
   for (const a of D.alarms || []) {
     if (a.triggered) continue;
@@ -605,8 +608,7 @@ function drawMap() {
   if (!S.view) fitView();
   const { f, ut, fb, soi, children, vs } = mapObjects();
   hits = [];
-  // grid rings
-  const sc = S.view.scale;
+  const sc = S.view.scale; // also sizes the scale bar
   const step = Math.pow(10, Math.floor(Math.log10(150 / sc)));
   // body + atmosphere + SOI
   const c0 = w2s([0, 0]);

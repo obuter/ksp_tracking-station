@@ -632,14 +632,16 @@ function rings() {
     if (b === 0) status = "helio";
     else if (b === 1) status = "ground";
     else {
-      // look for any cluster of ≥3 relays sharing an altitude (±2%), well spread, above the body radius
-      const R = D.planets[b].radius;
+      // look for any cluster of ≥3 relays sharing an orbit (SMA ±0.5%) where each neighbour pair has line of sight;
+      // CommNet occludes at radius × 0.75 (atmosphere) or × 0.9 (vacuum)
+      const P = D.planets[b], R = P.radius * (P.atm ? 0.75 : 0.9);
       for (const seed of list) {
-        const cl = list.filter(x => Math.abs(x.v.orbit.SMA - seed.v.orbit.SMA) / seed.v.orbit.SMA < 0.02 && x.ang != null);
+        const cl = list.filter(x => Math.abs(x.v.orbit.SMA - seed.v.orbit.SMA) / seed.v.orbit.SMA < 0.005 && x.ang != null);
         if (cl.length < 3) continue;
         const a = cl.map(x => x.ang).sort((x, y) => x - y);
-        let minGap = 360; for (let i = 0; i < a.length; i++) minGap = Math.min(minGap, ((a[(i + 1) % a.length] - a[i]) + 360) % 360 || 360);
-        if (minGap > 90 && Math.min(...cl.map(x => x.v.orbit.pe_alt)) > R) { status = "ok"; ring = cl; break; }
+        let maxGap = 0; for (let i = 0; i < a.length; i++) maxGap = Math.max(maxGap, ((a[(i + 1) % a.length] - a[i]) + 360) % 360 || 360);
+        const r = Math.min(...cl.map(x => x.v.orbit.pe_alt)) + P.radius;
+        if (r * Math.cos(maxGap / 2 * Math.PI / 180) > R) { status = "ok"; ring = cl; break; }
       }
     }
     return { b, list, angs, status, ring };
@@ -691,7 +693,7 @@ function renderTabs() {
         : r.status === "ground" ? `<span class="good">ground stations ✓</span>` : `<span class="warn">no complete ring</span>`;
       return `<tr><td><b>${esc(bodyName(r.b))}</b></td><td>${st}</td>
         <td>${r.list.map(x => `<span class="tag relay" data-id="${esc(vid(x.v))}" style="cursor:pointer;${r.ring.includes(x) ? "border-color:var(--good)" : ""}">${esc(x.v.name)} · ${esc(x.best)} · ${dist(x.v.orbit.ap_alt)}${x.ang != null ? " · " + num(x.ang, 0) + "°" : ""}</span>`).join(" ")}</td></tr>`;
-    }).join("") + `</table><div class="dim" style="padding:8px 10px;font-size:11px">Ring ✓ = ≥3 relays at the same altitude (±2%), ≥90° apart, ring altitude above the body radius. DSN = 250 G (Tracking Station L3).</div>`;
+    }).join("") + `</table><div class="dim" style="padding:8px 10px;font-size:11px">Ring ✓ = ≥3 relays on the same orbit (SMA ±0.5%), each with line of sight to its neighbours (CommNet occlusion: radius × 0.75 with atmosphere, × 0.9 without). DSN = 250 G (Tracking Station L3).</div>`;
   } else if (S.tab === "bodies") {
     const ut = D.header.ut, k = helioPos(1, ut);
     h = `<table><tr><th>Body</th><th class="num">Radius</th><th class="num">Atmosphere</th><th class="num">Surface g</th><th class="num">SOI</th><th class="num">Distance to Kerbin now</th><th class="num">Vessels</th>

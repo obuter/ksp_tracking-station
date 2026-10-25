@@ -57,7 +57,8 @@ The player is in the game right now, often with the dashboard on a second monito
 - **Breaking Ground seismometer:** only impacts generate science (≥3 kJ; Mun reference energy 7.82e8 J, scaling with ½mv²).
   - Crash heavy stages at full speed near the station.
   - Keep the impactor as the active vessel.
-- **Kerbal XP:** levels only count on recovery at Kerbin, or as the game awards them. The digest's XP is an estimate.
+- **Kerbal XP:** levels apply on recovery at Kerbin, **or in the field**: a Mobile Processing Lab has a free "Level Up Crew" button (`ModuleExperienceManagement`, costPerKerbal = 0) for kerbals aboard its vessel. The digest's XP is an estimate.
+- **Science after the tech tree:** still worth funds. Patents Licensing (Admin building) converts a share of science from contracts **and transmissions** (lab output included) into funds.
 
 ## End of session: update `notes/campaign.md`
 

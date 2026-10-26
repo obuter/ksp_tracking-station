@@ -44,7 +44,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 ## KSP save facts (easy to get wrong)
 
 - CRLF line endings; tab-indented ConfigNode format.
-- Facility `lvl` is normalized 0 / 0.5 / 1, which is level 1 / 2 / 3.
+- Facility `lvl` is normalized 0 / 0.5 / 1, which is level 1 / 2 / 3. `FlagPole` has a single level (`lvl = 0` is maxed).
 - Maneuver `dV = radial, normal, prograde` (in that order) in the node's orbit frame.
 - Kerbin: SMA 13,599,840,256 m, ECC 0, MNA 3.14 at epoch 0. Kerbol radius 261.6 Mm.
 - The in-game Ap/Pe readout is **altitude above the surface**, not radius.

@@ -378,9 +378,10 @@ setInterval(() => D && renderAge(), 1000);
 // ------------------------------------------------------------ top bar
 const FAC_SHORT = { ResearchAndDevelopment: "R&D", VehicleAssemblyBuilding: "VAB", SpaceplaneHangar: "SPH",
   AstronautComplex: "Astronaut", TrackingStation: "Tracking", MissionControl: "Mission Ctrl" };
+const FAC_MAX = { FlagPole: 1 }; // single-level facilities; the rest go to L3
 function renderTop(pulse) { // on each new save; next-up and the save age refresh on their own
   const h = D.header, c = D.career;
-  const facs = Object.entries(c.facilities || {}), low = facs.filter(([, v]) => v < 3); // maxed ones fold into one chip
+  const facs = Object.entries(c.facilities || {}), low = facs.filter(([k, v]) => v < (FAC_MAX[k] || 3)); // maxed ones fold into one chip
   const all = facs.map(([k, v]) => `${FAC_SHORT[k] || k} L${v}`).join(" · ");
   const delta = (k, d) => { const x = DELTA[k]; return fin(x) && Math.abs(x) >= 0.05
     ? ` <i class="delta ${x > 0 ? "good" : "bad"}" title="Change since the previous save">${x > 0 ? "+" : "−"}${num(Math.abs(x), d)}</i>` : ""; };

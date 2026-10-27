@@ -186,8 +186,8 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 0 5px; border: 1px sol
   <button class="x" title="Close  ( Esc )">×</button>
   <h3>Controls</h3>
   <dl>
-    <dt>Map</dt><dd>Drag to pan · scroll or pinch to zoom · click a craft to select it · click a planet or moon to focus on it</dd>
-    <dt>Map buttons</dt><dd><b>Fit</b> frames everything · <b>Zoom to selected</b> · <b>▲ Parent</b> goes up one level</dd>
+    <dt>Map</dt><dd>One map of the whole system: drag to pan · scroll or pinch to zoom from Kerbol down to a single craft (moons and craft appear as you zoom in) · click a craft to select it · click a planet or moon to jump to it</dd>
+    <dt>Map buttons</dt><dd>The body menu jumps to a body (it follows as you zoom) · <b>Fit</b> frames the current body · <b>Zoom to selected</b> · <b>▲ Parent</b> jumps up one level</dd>
     <dt>Vessel list</dt><dd>Click a craft to select it · click a body name to focus the map · ▾ / ▸ collapses a group</dd>
     <dt>Type chips</dt><dd>Click to show or hide a type · double-click to show only that type</dd>
     <dt>Search</dt><dd><kbd>/</kbd> focuses · <kbd>Enter</kbd> selects the first match · <kbd>Esc</kbd> clears</dd>
@@ -208,9 +208,9 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 0 5px; border: 1px sol
     <canvas id="map"></canvas>
     <div class="mapbar">
       <select id="focus"></select>
-      <button id="btnFit" title="Fit everything in view">Fit</button>
+      <button id="btnFit" title="Frame the current body">Fit</button>
       <button id="btnSel" title="Zoom to selected vessel">Zoom to selected</button>
-      <button id="btnUp" title="Go to parent body">▲ Parent</button>
+      <button id="btnUp" title="Jump to the parent body">▲ Parent</button>
       <button id="btnHelp" title="Controls  ( ? )">?</button>
     </div>
     <div class="mapinfo" id="mapinfo"></div>
@@ -718,42 +718,57 @@ function renderTabs() {
 // ------------------------------------------------------------ map
 const cv = $("map"), ctx = cv.getContext("2d");
 let hits = [];
+// One map in Kerbol's frame. S.view = {b, cx, cy, scale}: the view centre is (cx, cy) metres from body b,
+// so it stays on that body when a new save moves the planets. S.focus is the body the camera is on.
 function focusBody() { return S.focus ?? 1; }
-function mapObjects() {
-  const f = focusBody(), ut = D.header.ut, fb = D.planets[f];
-  const soi = fb.soi || 2e11;
-  const children = D.planets.filter(p => p.parent === f);
-  const vs = D.vessels.filter(v => v.orbit?.ref === f && v.situation !== "LANDED" && v.situation !== "SPLASHED" && v.situation !== "PRELAUNCH" && (visible(v) || vid(v) === S.sel));
-  return { f, ut, fb, soi, children, vs };
-}
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const inFlight = v => !["LANDED", "SPLASHED", "PRELAUNCH"].includes(v.situation);
+const soiOf = b => D.planets[b].soi || 2e11;
+function vesselsAt(b) { return D.vessels.filter(v => v.orbit?.ref === b && inFlight(v) && (visible(v) || vid(v) === S.sel)); }
+let HP = { ut: null, p: [] }; // body positions at the save's UT
+function bodyPos(b) { const ut = D.header.ut; if (HP.ut !== ut) HP = { ut, p: [] }; return HP.p[b] ??= helioPos(b, ut); }
 function fitView(toSel) {
-  const { fb, soi, children, vs } = mapObjects();
   const W = cv.clientWidth, H = cv.clientHeight;
   if (!W || !H) return; // hidden: a zero size would give scale 0
-  let ext = fb.radius * 3;
-  const sel = selected();
-  if (toSel && sel && sel.orbit?.ref === focusBody()) {
-    const p = vesselLocal(sel, D.header.ut);
-    let span = Math.max(fb.radius * 2, (fin(sel.orbit.ap_alt) ? sel.orbit.ap_alt + fb.radius : soi) * 0.25);
+  const half = Math.min(W, H) / 2, sel = selected(), ut = D.header.ut;
+  if (toSel && sel && vesselLocal(sel, ut)) {
+    const b = sel.orbit.ref, fb = D.planets[b], p = vesselLocal(sel, ut);
+    let span = Math.max(fb.radius * 2, (fin(sel.orbit.ap_alt) ? sel.orbit.ap_alt + fb.radius : soiOf(b)) * 0.25);
     if (sel.kerbin_relative) span = Math.max(sel.kerbin_relative.distance_m * 1.6, 1.5e8);
-    S.view = { cx: p[0], cy: p[1], scale: Math.min(W, H) / 2 / span };
+    S.view = { b, cx: p[0], cy: p[1], scale: half / span };
     return;
   }
-  // planet/moon view: frame the craft if there are any (zoom out to see moons), else the moons
+  // body view: frame the craft if there are any (zoom out to see moons), else the moons
+  const f = focusBody(), fb = D.planets[f], soi = soiOf(f), vs = vesselsAt(f);
+  let ext = fb.radius * 3;
   const craft = vs.filter(v => !MINOR.has(v.type));
   if (craft.length) for (const v of craft) { const o = v.orbit; ext = Math.max(ext, o.ECC < 1 && o.SMA > 0 ? o.SMA * (1 + o.ECC) : Math.min(soi, Math.abs(o.SMA) * 4)); }
-  else for (const c of children) ext = Math.max(ext, c.orbit.SMA * (1 + c.orbit.ECC));
-  if (focusBody() === 0) { // don't let one far object squash the inner system
+  else for (const c of D.planets) if (c.parent === f) ext = Math.max(ext, c.orbit.SMA * (1 + c.orbit.ECC));
+  if (f === 0) { // don't let one far object squash the inner system
     const vex = vs.length ? Math.max(...vs.map(v => v.orbit.ECC < 1 ? v.orbit.SMA * (1 + v.orbit.ECC) : 0)) : 0;
     ext = Math.max(vex, D.planets[1].orbit.SMA) * 1.08;
   }
   ext = Math.min(ext * 1.08, soi);
-  S.view = { cx: 0, cy: 0, scale: Math.min(W, H) / 2 / ext };
+  S.view = { b: f, cx: 0, cy: 0, scale: half / ext };
 }
-function w2s(p) { const v = S.view; return [cv.clientWidth / 2 + (p[0] - v.cx) * v.scale, cv.clientHeight / 2 - (p[1] - v.cy) * v.scale]; }
-function drawPath(pts, color, width, dash) {
+function cameraBody() { // the smallest body whose SOI holds the view centre and fills a good part of the map
+  const v = S.view, o = bodyPos(v.b), x = o[0] + v.cx, y = o[1] + v.cy, min = Math.min(cv.clientWidth, cv.clientHeight) / 4;
+  let b = 0;
+  for (;;) {
+    const kid = D.planets.find(p => p.parent === b && p.soi * v.scale > min && Math.hypot(bodyPos(p.idx)[0] - x, bodyPos(p.idx)[1] - y) < p.soi);
+    if (!kid) return b;
+    b = kid.idx;
+  }
+}
+function syncCamera() { // follow the body the view is on: re-anchor the view to it and update the menu
+  const b = cameraBody();
+  if (b !== S.view.b) { const o = bodyPos(S.view.b), n = bodyPos(b); S.view = { b, cx: S.view.cx + o[0] - n[0], cy: S.view.cy + o[1] - n[1], scale: S.view.scale }; }
+  if (b !== S.focus) { S.focus = b; store.set("focus", b); renderFocus(); }
+}
+function w2s(p) { const v = S.view, o = bodyPos(v.b); return [cv.clientWidth / 2 + (p[0] - o[0] - v.cx) * v.scale, cv.clientHeight / 2 - (p[1] - o[1] - v.cy) * v.scale]; }
+function drawPath(pts, color, width, dash, o) { // o: offset of the frame the points are in (the parent body's position)
   ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
-  pts.forEach((p, i) => { const s = w2s(p); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
+  pts.forEach((p, i) => { const s = w2s(o ? add(p, o) : p); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
   ctx.stroke(); ctx.setLineDash([]);
 }
 function circle(c, r, fill, stroke, w, dash) {
@@ -780,57 +795,61 @@ function drawMap() {
   if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = "#04070a"; ctx.fillRect(0, 0, W, H);
-  if (!S.view || !(S.view.scale > 0)) fitView();
-  const { f, ut, fb, soi, children, vs } = mapObjects();
+  if (!S.view || !(S.view.scale > 0) || S.view.b == null) fitView();
+  if (!drag) syncCamera(); // not mid-drag: the drag keeps its own copy of the view
+  const ut = D.header.ut, pl = D.planets, f = focusBody(), sc = S.view.scale, sel = selected();
   hits = [];
-  const sc = S.view.scale; // also sizes the scale bar
-  const step = Math.pow(10, Math.floor(Math.log10(150 / sc)));
-  // body + atmosphere + SOI
-  const c0 = w2s([0, 0]);
-  if (fb.atm) circle(c0, Math.max((fb.radius + fb.atm) * sc, 4), null, "rgba(70,195,255,.35)", 1, [3, 3]);
-  circle(c0, Math.max(fb.radius * sc, f === 0 ? 6 : 4), fb.color, null);
-  if (f !== 0 && fb.soi && fb.soi * sc < 4 * Math.max(W, H)) circle(c0, fb.soi * sc, null, "rgba(255,255,255,.12)", 1, [6, 6]);
-  label(fb.name, c0, "#fff", -Math.max(fb.radius * sc, 6) - 6, 2);
-  // children (planets or moons)
-  for (const c of children) {
-    drawPath(orbitPath(c.orbit, soi), c.color + "66", 1);
-    const p = posAt(c.orbit, ut, fb.GM), s = w2s(p);
-    if (c.soi && c.soi * sc > 3) circle(s, c.soi * sc, null, c.color + "55", 1, [4, 4]);
-    circle(s, Math.max(c.radius * sc, 4), c.color, null);
-    label(c.name, s, c.color, -Math.max(c.radius * sc, 4) - 5);
-    hits.push({ s, r: Math.max(c.radius * sc, 8), body: c.idx, name: c.name });
+  const onScreen = (s, r) => s[0] + r > 0 && s[0] - r < W && s[1] + r > 0 && s[1] - r < H;
+  // what to show: every planet; a body's moons and craft only once its SOI is big enough on screen
+  const shown = [], open = new Set();
+  (function visit(i) {
+    shown.push(i);
+    const b = pl[i], r = (b.soi || 0) * sc;
+    if (i !== 0 && !(r > 6 && onScreen(w2s(bodyPos(i)), r))) return;
+    open.add(i);
+    for (const c of pl) if (c.parent === i && (i === 0 || c.orbit.SMA * (1 + c.orbit.ECC) * sc > 6)) visit(c.idx);
+  })(0);
+  const reach = v => v.orbit.ECC < 1 && v.orbit.SMA > 0 ? v.orbit.SMA * (1 + v.orbit.ECC) : soiOf(v.orbit.ref);
+  const vs = D.vessels.filter(v => open.has(v.orbit?.ref) && inFlight(v) && (visible(v) || vid(v) === S.sel)
+    && vesselLocal(v, ut) && (v === sel || v.orbit.ref === 0 || reach(v) * sc > 3));
+  // orbits: bodies, then craft
+  for (const i of shown) if (i) drawPath(orbitPath(pl[i].orbit, soiOf(pl[i].parent)), pl[i].color + "66", 1, null, bodyPos(pl[i].parent));
+  for (const v of vs) if (v !== sel) drawPath(orbitPath(v.orbit, soiOf(v.orbit.ref)), (TYPE_COLOR[v.type] || "#aaa") + (MINOR.has(v.type) ? "33" : "55"), 1, null, bodyPos(v.orbit.ref));
+  // bodies: atmosphere, disc, SOI
+  for (const i of shown) {
+    const b = pl[i], s = w2s(bodyPos(i)), r = b.radius * sc, cam = i === f;
+    if (b.atm && (b.radius + b.atm) * sc > 3) circle(s, (b.radius + b.atm) * sc, null, "rgba(70,195,255,.35)", 1, [3, 3]);
+    circle(s, Math.max(r, i === 0 ? 6 : b.parent === 0 ? 4 : 3), b.color, null);
+    if (i && b.soi * sc > 3 && b.soi * sc < 4 * Math.max(W, H)) circle(s, b.soi * sc, null, cam ? "rgba(255,255,255,.12)" : b.color + "55", 1, cam ? [6, 6] : [4, 4]);
+    label(b.name, s, cam ? "#fff" : b.color, -Math.max(r, 4) - 5, cam ? 2 : 3);
+    hits.push({ s, r: Math.max(r, 8), body: i, name: b.name });
   }
-  // vessels
-  const sel = selected();
-  for (const v of vs) {
-    const isSel = v === sel, col = TYPE_COLOR[v.type] || "#aaa";
-    if (!isSel) drawPath(orbitPath(v.orbit, soi), col + (MINOR.has(v.type) ? "33" : "55"), 1);
-  }
-  if (sel && sel.orbit?.ref === f && vs.includes(sel)) {
-    drawPath(orbitPath(sel.orbit, soi), "#46c3ff", 2);
-    // Ap / Pe markers
+  // selected craft: orbit, Ap/Pe, planned maneuvers
+  if (sel && vs.includes(sel)) {
+    const ref = sel.orbit.ref, o = bodyPos(ref), at = p => w2s(add(p, o));
+    drawPath(orbitPath(sel.orbit, soiOf(ref)), "#46c3ff", 2, null, o);
     if (sel.orbit.ECC < 1) {
-      const pe = w2s(posAtNu(sel.orbit, 0)), ap = w2s(posAtNu(sel.orbit, Math.PI));
+      const pe = at(posAtNu(sel.orbit, 0)), ap = at(posAtNu(sel.orbit, Math.PI));
       circle(pe, 3.5, "#46c3ff"); label("Pe " + dist(sel.orbit.pe_alt), pe, "#9fdcff", 16, 1);
       circle(ap, 3.5, "#46c3ff"); label("Ap " + dist(sel.orbit.ap_alt), ap, "#9fdcff", 16, 1);
     }
     let prev = sel.orbit;
     for (const m of sel.maneuvers || []) {
-      const node = w2s(posAt(prev, m.ut, fb.GM));
+      const node = at(posAt(prev, m.ut, pl[ref].GM));
       ctx.save(); ctx.translate(node[0], node[1]); ctx.rotate(Math.PI / 4); ctx.fillStyle = "#ffb547"; ctx.fillRect(-5, -5, 10, 10); ctx.restore();
       label(`${num(m.total, 1)} m/s`, node, "#ffb547", -10, 1);
-      if (m.after) { drawPath(orbitPath(m.after, soi), "#ffb547", 1.6, [7, 5]); prev = m.after; } else break;
+      if (m.after) { drawPath(orbitPath(m.after, soiOf(ref)), "#ffb547", 1.6, [7, 5], o); prev = m.after; } else break;
     }
     // line to Kerbin for heliocentric craft
-    if (f === 0) {
-      const ks = w2s(posAt(D.planets[1].orbit, ut, fb.GM)), ss = w2s(vesselLocal(sel, ut));
+    if (ref === 0) {
+      const ks = w2s(bodyPos(1)), ss = at(vesselLocal(sel, ut));
       ctx.beginPath(); ctx.moveTo(ss[0], ss[1]); ctx.lineTo(ks[0], ks[1]); ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.setLineDash([2, 4]); ctx.stroke(); ctx.setLineDash([]);
       if (sel.kerbin_relative) label(dist(sel.kerbin_relative.distance_m), [(ss[0] + ks[0]) / 2, (ss[1] + ks[1]) / 2], "#ddd", -4, 1);
     }
   }
+  // craft markers on top
   for (const v of vs) {
-    const p = vesselLocal(v, ut); if (!p) continue;
-    const s = w2s(p), isSel = v === sel, col = TYPE_COLOR[v.type] || "#aaa";
+    const s = w2s(add(vesselLocal(v, ut), bodyPos(v.orbit.ref))), isSel = v === sel, col = TYPE_COLOR[v.type] || "#aaa";
     ctx.save(); ctx.translate(s[0], s[1]); ctx.rotate(Math.PI / 4);
     const z = isSel ? 6 : MINOR.has(v.type) ? 2.5 : 4;
     ctx.fillStyle = col; ctx.fillRect(-z, -z, 2 * z, 2 * z);
@@ -841,11 +860,13 @@ function drawMap() {
   }
   drawLabels();
   // scale bar
+  const step = Math.pow(10, Math.floor(Math.log10(150 / sc)));
   const barM = step * (150 / sc / step > 5 ? 5 : 150 / sc / step > 2 ? 2 : 1), barPx = barM * sc;
   ctx.strokeStyle = "#7f97ab"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(W - 20 - barPx, H - 40); ctx.lineTo(W - 20, H - 40); ctx.stroke();
   ctx.fillStyle = "#7f97ab"; ctx.font = "11px ui-monospace, monospace"; ctx.textAlign = "right"; ctx.fillText(dist(barM), W - 20, H - 46);
-  const landedHere = D.vessels.filter(v => v.orbit?.ref === f && ["LANDED", "SPLASHED"].includes(v.situation) && !MINOR.has(v.type)).length;
-  $("mapinfo").textContent = `${fb.name} · ${vs.filter(v => !MINOR.has(v.type)).length} in flight${landedHere ? ` · ${landedHere} landed` : ""} · positions at ${kdate(ut)}`;
+  const here = D.vessels.filter(v => v.orbit?.ref === f && !MINOR.has(v.type));
+  const landedHere = here.filter(v => ["LANDED", "SPLASHED"].includes(v.situation)).length, flying = here.filter(inFlight).length;
+  $("mapinfo").textContent = `${pl[f].name} · ${flying} in flight${landedHere ? ` · ${landedHere} landed` : ""} · positions at ${kdate(ut)}`;
 }
 // map interaction: mouse, pen and touch (one finger pans, two pinch-zoom)
 const ptrs = new Map(); // pointers down on the map: id -> [x, y]
@@ -891,7 +912,7 @@ function endPointer(e) {
     const r = cv.getBoundingClientRect(), best = pick(e.clientX - r.left, e.clientY - r.top);
     if (best?.id) select(best.id, false); else if (best?.body != null) setFocus(best.body);
   }
-  drag = null;
+  drag = null; drawMap(); // follows the body the view ended on
 }
 cv.addEventListener("pointerup", endPointer);
 cv.addEventListener("pointercancel", endPointer);
@@ -918,7 +939,7 @@ function setFocus(b, keepView) {
 function select(id, fromList) {
   S.sel = id; store.set("sel", id);
   const v = selected();
-  if (v?.orbit?.ref != null && v.orbit.ref !== focusBody()) { S.focus = v.orbit.ref; store.set("focus", S.focus); S.view = null; }
+  if (fromList && v?.orbit?.ref != null && v.orbit.ref !== focusBody()) { S.focus = v.orbit.ref; store.set("focus", S.focus); S.view = null; }
   renderList(); renderSide(); renderFocus(); drawMap();
   if (fromList && matchMedia("(max-width: 1000px)").matches) $("side").scrollIntoView({ behavior: "smooth" }); // one column: show the details
   else if (fromList) document.querySelector(".vrow.sel")?.scrollIntoView({ block: "nearest" });
@@ -930,7 +951,7 @@ function renderFocus() {
 }
 $("focus").addEventListener("change", e => setFocus(+e.target.value));
 $("btnFit").addEventListener("click", () => { fitView(); drawMap(); });
-$("btnSel").addEventListener("click", () => { const v = selected(); if (!v) return; if (v.orbit?.ref !== focusBody()) { S.focus = v.orbit.ref; renderFocus(); } fitView(true); drawMap(); });
+$("btnSel").addEventListener("click", () => { if (!selected()) return; fitView(true); drawMap(); });
 $("btnUp").addEventListener("click", () => { const p = D.planets[focusBody()].parent; if (p != null) setFocus(p); });
 function setSearch(q) { S.q = q.trim().toLowerCase(); renderList(); drawMap(); }
 $("search").addEventListener("input", e => setSearch(e.target.value));

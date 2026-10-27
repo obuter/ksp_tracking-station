@@ -23,7 +23,7 @@ You are improving the tools, not playing the game. Read `CLAUDE.md` first if you
 
 **`web/dashboard.html`**: one file, inline CSS/JS, no libraries.
 - Data: injects `<script src="../data/digest.js?t=…">` every 5 s; re-renders only when `header.generated_at` changes.
-- Layout: top bar (with the most urgent alert as "next up" and career change since the previous save), vessel list (collapsible body groups), canvas map (system/body view, zoom/pan by mouse or touch, maneuver dashed orbits, `?` help overlay), side panel, tabs (Alerts with mute, Kerbals, Contracts, Network, Bodies). Below 1000 px wide everything stacks into one scrolling column.
+- Layout: top bar (with the most urgent alert as "next up" and career change since the previous save), vessel list (collapsible body groups), canvas map (one continuous system map: zoom from Kerbol down to a craft, moons and craft appear as you zoom in; body menu and ▲ Parent jump the camera; zoom/pan by mouse or touch, maneuver dashed orbits, `?` help overlay), side panel, tabs (Alerts with mute, Kerbals, Contracts, Network, Bodies). Below 1000 px wide everything stacks into one scrolling column.
 - `alerts()` gives each alert a stable `key`; muted keys are dropped once their alert disappears, so a condition that clears and returns alerts again.
 - JS orbit maths mirrors Python's (`rotator`, `trueAnomalyAt`, `posAt`, `orbitPath`, `helioPos`).
 - UI state is kept in `localStorage` (`ksp-ts:*`); wrap access in try/catch.

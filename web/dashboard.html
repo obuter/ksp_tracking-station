@@ -879,7 +879,7 @@ function pick(x, y) { // nearest clickable thing at canvas point x, y
 function startDrag() { // (re)start from the pointers now down, so adding or lifting a finger doesn't jump
   const [a, b = a] = ptrs.values();
   drag = { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]),
-    cx: S.view.cx, cy: S.view.cy, scale: S.view.scale, moved: drag?.moved || ptrs.size > 1 };
+    b: S.view.b, cx: S.view.cx, cy: S.view.cy, scale: S.view.scale, moved: drag?.moved || ptrs.size > 1 };
 }
 function hover(x, y) {
   const tip = $("tip"), h = pick(x, y), o = h?.v?.orbit;
@@ -902,7 +902,7 @@ cv.addEventListener("pointermove", e => {
   if (Math.abs(x - drag.x) + Math.abs(y - drag.y) > 4) drag.moved = true;
   const sc = drag.d && d ? drag.scale * d / drag.d : drag.scale, W2 = r.width / 2, H2 = r.height / 2;
   const wx = drag.cx + (drag.x - r.left - W2) / drag.scale, wy = drag.cy - (drag.y - r.top - H2) / drag.scale; // world point that started under the pointers
-  S.view = { cx: wx - (x - r.left - W2) / sc, cy: wy + (y - r.top - H2) / sc, scale: sc }; drawMap();
+  S.view = { b: drag.b, cx: wx - (x - r.left - W2) / sc, cy: wy + (y - r.top - H2) / sc, scale: sc }; drawMap();
 });
 function endPointer(e) {
   if (!ptrs.delete(e.pointerId)) return;

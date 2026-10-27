@@ -314,19 +314,6 @@ function posAtNu(el, nu, rot) {
   return (rot || rotator(el))(r * Math.cos(nu), r * Math.sin(nu));
 }
 function posAt(el, t, GM) { return posAtNu(el, trueAnomalyAt(el, t, GM)); }
-function orbitPath(el, maxR) {
-  const rot = rotator(el), pts = [], e = el.ECC;
-  if (e < 1 && el.SMA > 0) {
-    for (let k = 0; k <= 360; k++) pts.push(posAtNu(el, k / 360 * 2 * Math.PI, rot));
-  } else {
-    const nmax = Math.acos(-1 / e) * 0.995;
-    for (let k = -200; k <= 200; k++) {
-      const nu = k / 200 * nmax; const p = posAtNu(el, nu, rot);
-      if (Math.hypot(p[0], p[1], p[2]) <= maxR) pts.push(p);
-    }
-  }
-  return pts;
-}
 function helioPos(idx, t) { // position of body idx relative to Kerbol
   const b = D.planets[idx]; if (!b || b.parent == null) return [0, 0, 0];
   const par = D.planets[b.parent]; const p = posAt(b.orbit, t, par.GM); const q = helioPos(b.parent, t);
@@ -766,15 +753,35 @@ function syncCamera() { // follow the body the view is on: re-anchor the view to
   if (b !== S.focus) { S.focus = b; store.set("focus", b); renderFocus(); }
 }
 function w2s(p) { const v = S.view, o = bodyPos(v.b); return [cv.clientWidth / 2 + (p[0] - o[0] - v.cx) * v.scale, cv.clientHeight / 2 - (p[1] - o[1] - v.cy) * v.scale]; }
-function drawPath(pts, color, width, dash, o) { // o: offset of the frame the points are in (the parent body's position)
+// Stroke the screen-space curve pt(t), t0..t1, from n pieces. A piece is split while it is long on screen and
+// dropped while it is off screen, so a planet's orbit stays smooth and cheap at any zoom. pt may return null (gap).
+function strokeCurve(pt, t0, t1, n, color, width, dash) {
+  const W = cv.clientWidth, H = cv.clientHeight;
   ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
-  pts.forEach((p, i) => { const s = w2s(o ? add(p, o) : p); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
+  let pen = false; // true: the last lineTo ended where the next piece starts
+  const piece = (ta, a, tb, b, depth) => {
+    if (!a || !b) { pen = false; return; }
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), m = L * 0.02 + 10; // margin: the curve bulges past its chord
+    if (Math.max(a[0], b[0]) < -m || Math.min(a[0], b[0]) > W + m || Math.max(a[1], b[1]) < -m || Math.min(a[1], b[1]) > H + m) { pen = false; return; }
+    if (L > 6 && depth < 30) { const tm = (ta + tb) / 2, c = pt(tm); piece(ta, a, tm, c, depth + 1); piece(tm, c, tb, b, depth + 1); return; }
+    if (!pen) ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]); pen = true;
+  };
+  let ta = t0, a = pt(t0);
+  for (let k = 1; k <= n; k++) { const tb = t0 + (t1 - t0) * k / n, b = pt(tb); piece(ta, a, tb, b, 0); ta = tb; a = b; }
   ctx.stroke(); ctx.setLineDash([]);
 }
+function drawOrbit(el, maxR, color, width, dash, o) { // o: position of the body it orbits; open orbits stop at maxR
+  const rot = rotator(el), closed = el.ECC < 1 && el.SMA > 0, nmax = closed ? Math.PI : Math.acos(-1 / el.ECC) * 0.995;
+  const pt = nu => { const p = posAtNu(el, nu, rot); return closed || Math.hypot(p[0], p[1], p[2]) <= maxR ? w2s(add(p, o)) : null; };
+  strokeCurve(pt, -nmax, nmax, 360, color, width, dash);
+}
 function circle(c, r, fill, stroke, w, dash) {
+  if (fill) { ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, 2 * Math.PI); ctx.fillStyle = fill; ctx.fill(); }
+  if (!stroke) return;
+  if (r > 2 * Math.max(cv.clientWidth, cv.clientHeight)) return strokeCurve(a => [c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)], 0, 2 * Math.PI, 360, stroke, w || 1, dash);
   ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, 2 * Math.PI);
-  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = w || 1; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]); }
+  ctx.strokeStyle = stroke; ctx.lineWidth = w || 1; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]);
 }
 let labels = []; // queued while drawing, painted last by drawLabels()
 function label(txt, s, color, dy = -9, pri = 3) { labels.push({ txt, x: s[0], y: s[1] + dy, color, pri }); }
@@ -813,8 +820,8 @@ function drawMap() {
   const vs = D.vessels.filter(v => open.has(v.orbit?.ref) && inFlight(v) && (visible(v) || vid(v) === S.sel)
     && vesselLocal(v, ut) && (v === sel || v.orbit.ref === 0 || reach(v) * sc > 3));
   // orbits: bodies, then craft
-  for (const i of shown) if (i) drawPath(orbitPath(pl[i].orbit, soiOf(pl[i].parent)), pl[i].color + "66", 1, null, bodyPos(pl[i].parent));
-  for (const v of vs) if (v !== sel) drawPath(orbitPath(v.orbit, soiOf(v.orbit.ref)), (TYPE_COLOR[v.type] || "#aaa") + (MINOR.has(v.type) ? "33" : "55"), 1, null, bodyPos(v.orbit.ref));
+  for (const i of shown) if (i) drawOrbit(pl[i].orbit, soiOf(pl[i].parent), pl[i].color + "66", 1, null, bodyPos(pl[i].parent));
+  for (const v of vs) if (v !== sel) drawOrbit(v.orbit, soiOf(v.orbit.ref), (TYPE_COLOR[v.type] || "#aaa") + (MINOR.has(v.type) ? "33" : "55"), 1, null, bodyPos(v.orbit.ref));
   // bodies: atmosphere, disc, SOI
   for (const i of shown) {
     const b = pl[i], s = w2s(bodyPos(i)), r = b.radius * sc, cam = i === f;
@@ -827,7 +834,7 @@ function drawMap() {
   // selected craft: orbit, Ap/Pe, planned maneuvers
   if (sel && vs.includes(sel)) {
     const ref = sel.orbit.ref, o = bodyPos(ref), at = p => w2s(add(p, o));
-    drawPath(orbitPath(sel.orbit, soiOf(ref)), "#46c3ff", 2, null, o);
+    drawOrbit(sel.orbit, soiOf(ref), "#46c3ff", 2, null, o);
     if (sel.orbit.ECC < 1) {
       const pe = at(posAtNu(sel.orbit, 0)), ap = at(posAtNu(sel.orbit, Math.PI));
       circle(pe, 3.5, "#46c3ff"); label("Pe " + dist(sel.orbit.pe_alt), pe, "#9fdcff", 16, 1);
@@ -838,7 +845,7 @@ function drawMap() {
       const node = at(posAt(prev, m.ut, pl[ref].GM));
       ctx.save(); ctx.translate(node[0], node[1]); ctx.rotate(Math.PI / 4); ctx.fillStyle = "#ffb547"; ctx.fillRect(-5, -5, 10, 10); ctx.restore();
       label(`${num(m.total, 1)} m/s`, node, "#ffb547", -10, 1);
-      if (m.after) { drawPath(orbitPath(m.after, soiOf(ref)), "#ffb547", 1.6, [7, 5], o); prev = m.after; } else break;
+      if (m.after) { drawOrbit(m.after, soiOf(ref), "#ffb547", 1.6, [7, 5], o); prev = m.after; } else break;
     }
     // line to Kerbin for heliocentric craft
     if (ref === 0) {
